@@ -12,8 +12,8 @@ steps:
         export NODE_ENV=production
         export EXPO_TOKEN="Nkr40J195TFXi_B4NW1gV5HXRt6Hna_4riLONNM6"
         
-        # Inizializza automaticamente il progetto per il nuovo account ed evita il blocco interattivo
-        eas project:init --non-interactive || true
+        # Specifica l'account esatto richiesto dal terminale per superare il blocco
+        eas init --account dyolad --non-interactive || true
         
         eas build --platform android --profile preview --non-interactive --clear-cache
 
