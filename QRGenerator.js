@@ -50,34 +50,37 @@ export default function QRGenerator({ isPremium, hasAdReward, setHasAdReward, se
       return;
     }
 
-    const { status } = await MediaLibrary.requestPermissionsAsync();
-    if (status !== 'granted') {
-      triggerAlert("Permesso Negato", "Abilita i permessi di archiviazione per salvare l'immagine.", "error");
-      return;
-    }
+    // Forza il controllo del Paywall o dell'Ad Reward prima di consentire il download
+    checkAccessAndExecute(async () => {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        triggerAlert("Permesso Negato", "Abilita i permessi di archiviazione per salvare l'immagine.", "error");
+        return;
+      }
 
-    if (svgRef.current) {
-      svgRef.current.toDataURL(async (dataURL) => {
-        try {
-          const path = `${FileSystem.documentDirectory}QR_${Date.now()}.png`;
-          await FileSystem.writeAsStringAsync(path, dataURL, { encoding: FileSystem.EncodingType.Base64 });
-          await MediaLibrary.saveToLibraryAsync(path);
+      if (svgRef.current) {
+        svgRef.current.toDataURL(async (dataURL) => {
+          try {
+            const path = `${FileSystem.documentDirectory}QR_${Date.now()}.png`;
+            await FileSystem.writeAsStringAsync(path, dataURL, { encoding: FileSystem.EncodingType.Base64 });
+            await MediaLibrary.saveToLibraryAsync(path);
 
-          const finalValue = isDynamic ? `https://qr-pro-dynamic/free-${Date.now()}` : text;
-          const newHistoryElement = {
-            id: Date.now().toString(),
-            data: finalValue,
-            type: isDynamic ? 'Dinamico' : 'Statico',
-            date: new Date().toLocaleDateString()
-          };
-          saveHistory([newHistoryElement, ...history]);
+            const finalValue = isDynamic ? `https://qr-pro-dynamic/free-${Date.now()}` : text;
+            const newHistoryElement = {
+              id: Date.now().toString(),
+              data: finalValue,
+              type: isDynamic ? 'Dinamico' : 'Statico',
+              date: new Date().toLocaleDateString()
+            };
+            saveHistory([newHistoryElement, ...history]);
 
-          triggerAlert("🏆 Salvato!", "Il codice QR è in Galleria ed è stato inserito nell'Archivio Generati.", "success");
-        } catch (err) {
-          triggerAlert("Errore", "Impossibile completare il download del file.", "error");
-        }
-      });
-    }
+            triggerAlert("🏆 Salvato!", "Il codice QR è in Galleria ed è stato inserito nell'Archivio Generati.", "success");
+          } catch (err) {
+            triggerAlert("Errore", "Impossibile completare il download del file.", "error");
+          }
+        });
+      }
+    });
   };
 
   return (
