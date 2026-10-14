@@ -2,10 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Linking, Modal } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ScreenCapture from 'expo-screen-capture';
+import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Paywall } from './PremiumFeatures'; 
 import QRGenerator from './QRGenerator'; 
 import HistoryManager from './HistoryManager'; 
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export default function App() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -13,9 +22,11 @@ export default function App() {
   const [scanResult, setScanResult] = useState(null);
   const [history, setHistory] = useState([]);
   const [isPremium, setIsPremium] = useState(false); 
+  const [premiumType, setPremiumType] = useState('none'); 
   const [hasAdReward, setHasAdReward] = useState(false); 
   const [showPaywall, setShowPaywall] = useState(false); 
   const [currentTab, setCurrentTab] = useState('scanner'); 
+  const [upsellModal, setUpsellingModal] = useState(false);
   const [customAlert, setCustomAlert] = useState({ visible: false, title: '', message: '', type: 'info' });
 
   useEffect(() => {
@@ -23,6 +34,7 @@ export default function App() {
       if (!permission || !permission.granted) {
         await requestPermission();
       }
+      await Notifications.requestPermissionsAsync();
     })();
     loadHistory();
     ScreenCapture.preventScreenCaptureAsync(); 
@@ -30,6 +42,22 @@ export default function App() {
 
   const triggerAlert = (title, message, type = 'info') => {
     setCustomAlert({ visible: true, title, message, type });
+  };
+
+  const scheduleExpiryNotification = async (days) => {
+    try {
+      const triggerSeconds = (days * 24 * 60 * 60) - (24 * 60 * 60); 
+      if (triggerSeconds > 0) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "⚠️ AVVISO DI SCADENZA",
+            body: "Il tuo codice QR dinamico scadrà tra 24 ore. Rinnova adesso per non interrompere il servizio.",
+            sound: true,
+          },
+          trigger: { seconds: triggerSeconds },
+        });
+      }
+    } catch (e) { console.log(e); }
   };
 
   const loadHistory = async () => {
@@ -53,11 +81,6 @@ export default function App() {
       setScanned(false);
       return;
     }
-    if (!isPremium && history.filter(h => h.type === 'Scansionato').length >= 5) { 
-      setShowPaywall(true); 
-      setScanned(false);
-      return; 
-    }
     const updatedHistory = [{ id: Date.now().toString(), data, type: 'Scansionato', date: new Date().toLocaleDateString() }, ...history];
     saveHistory(updatedHistory);
     setScanResult(data);
@@ -70,13 +93,13 @@ export default function App() {
   };
 
   if (showPaywall) {
-    return <Paywall setIsPremium={setIsPremium} setShowPaywall={setShowPaywall} onWatchAd={handleWatchAd} />;
+    return <Paywall setIsPremium={setIsPremium} setPremiumType={setPremiumType} setShowPaywall={setShowPaywall} onWatchAd={handleWatchAd} />;
   }
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>A D V A N C E D  Q R</Text>
-      {isPremium && <Text style={styles.proBadge}>👑 PRO ACTIVE</Text>}
+      {isPremium && <Text style={styles.proBadge}>👑 PRO ACTIVE ({premiumType.toUpperCase()})</Text>}
       {hasAdReward && !isPremium && <Text style={styles.adBadge}>📺 AD REWARD ACTIVE (1 USE)</Text>}
       
       <View style={styles.nav}>
@@ -92,12 +115,15 @@ export default function App() {
       {currentTab === 'generator' && (
         <QRGenerator 
           isPremium={isPremium} 
+          premiumType={premiumType}
           hasAdReward={hasAdReward}
           setHasAdReward={setHasAdReward}
           setShowPaywall={setShowPaywall} 
           history={history} 
           saveHistory={saveHistory} 
           triggerAlert={triggerAlert}
+          setUpsellingModal={setUpsellingModal}
+          scheduleExpiryNotification={scheduleExpiryNotification}
         />
       )}
 
@@ -112,7 +138,7 @@ export default function App() {
       )}
 
       {currentTab === 'history' && (
-        <HistoryManager history={history} saveHistory={saveHistory} triggerAlert={triggerAlert} />
+        <HistoryManager history={history} saveHistory={saveHistory} />
       )}
 
       <Modal animated transparent visible={customAlert.visible} onRequestClose={() => setCustomAlert({ ...customAlert, visible: false })}>
@@ -120,7 +146,7 @@ export default function App() {
           <View style={[styles.modalContent, { borderColor: customAlert.type === 'error' ? '#FF5C5C' : customAlert.type === 'success' ? '#20BF6B' : '#2F3B5C' }]}>
             <Text style={[styles.modalTitle, { color: customAlert.type === 'error' ? '#FF5C5C' : customAlert.type === 'success' ? '#20BF6B' : '#00ADB5' }]}>{customAlert.title}</Text>
             <Text style={styles.modalData}>{customAlert.message}</Text>
-            <TouchableOpacity style={styles.modalBtnClose} onPress={() => setCustomAlert({ ...customAlert, visible: false })}>
+            <TouchableOpacity style={styles.modalBtnCloseSingle} onPress={() => setCustomAlert({ ...customAlert, visible: false })}>
               <Text style={styles.modalBtnCloseT}>Ok</Text>
             </TouchableOpacity>
           </View>
@@ -162,10 +188,15 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(5,8,18,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { backgroundColor: '#141929', width: '100%', borderRadius: 24, padding: 24, borderWidth: 1, borderColor: '#2F3B5C', alignItems: 'center' },
   modalTitle: { fontSize: 13, fontWeight: '800', letterSpacing: 1.5, marginBottom: 15 },
-  modalData: { color: '#FFF', fontSize: 16, textAlign: 'center', marginBottom: 25, lineHeight: 22 },
+  modalData: { color: '#FFF', fontSize: 15, textAlign: 'center', marginBottom: 25, lineHeight: 22 },
   modalRow: { flexDirection: 'row', width: '100%' },
   modalBtnAct: { flex: 1, backgroundColor: '#00ADB5', padding: 16, borderRadius: 16, alignItems: 'center', marginRight: 10 },
   modalBtnActT: { color: '#FFF', fontWeight: '700' },
-  modalBtnClose: { flex: 1, backgroundColor: '#1F273D', padding: 16, borderRadius: 16, alignItems: 'center', minWidth: 100 },
-  modalBtnCloseT: { color: '#A0AEC0', fontWeight: '700' }
+  modalBtnClose: { flex: 1, backgroundColor: '#1F273D', padding: 16, borderRadius: 16, alignItems: 'center' },
+  modalBtnCloseSingle: { backgroundColor: '#1F273D', padding: 16, borderRadius: 16, alignItems: 'center', width: '100%', marginTop: 5 },
+  modalBtnCloseT: { color: '#FFF', fontWeight: '700', fontSize: 15, textAlign: 'center' },
+  upsellBtnGold: { backgroundColor: '#D4AF37', width: '100%', padding: 16, borderRadius: 16, alignItems: 'center', marginBottom: 12 },
+  upsellBtnDark: { backgroundColor: '#1F273D', width: '100%', padding: 16, borderRadius: 16, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#2F3B5C' },
+  upsellBtnTextDark: { color: '#090D1A', fontWeight: '800', fontSize: 14 },
+  upsellBtnTextLight: { color: '#FFF', fontWeight: '700', fontSize: 14 }
 });
