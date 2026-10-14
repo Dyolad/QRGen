@@ -8,33 +8,41 @@ import * as FileSystem from 'expo-file-system';
 const SUPABASE_URL = "https://supabase.co";
 const SUPABASE_KEY = "sb_publishable_BAys6XNmda-GHNX6P2Db8A_YZgRU79o";
 
-export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHasAdReward, setShowPaywall, history, saveHistory, triggerAlert, setUpsellingModal, scheduleExpiryNotification }) {
+export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHasAdReward, openFilteredPaywall, history, saveHistory, triggerAlert, setUpsellingModal, scheduleExpiryNotification }) {
   const [text, setText] = useState('');
   const [qrColor, setQrColor] = useState('#000000');
   const [logoUri, setLogoUri] = useState(null);
   const svgRef = useRef(null);
   const RICKROLL_PREVIEW_URL = "https://youtube.com";
 
-  const checkAccessAndExecute = (actionType, successCallback) => {
+  const checkAccessAndExecute = (actionType, targetType, successCallback) => {
     if (isPremium) {
       if (premiumType === 'mensile' && history.filter(h => h.type === 'Dinamico').length >= 10 && actionType === 'download_dynamic') {
         setUpsellingModal(true);
+        return;
+      }
+      if (targetType === 'statico' && premiumType !== 'vita') {
+        openFilteredPaywall('lifetime');
         return;
       }
       successCallback();
       return;
     }
     if (hasAdReward) {
+      if (targetType === 'statico') {
+        openFilteredPaywall('lifetime');
+        return;
+      }
       successCallback();
       setHasAdReward(false); 
       triggerAlert("Gettone Consumato", "Azione Premium completata!", "success");
       return;
     }
-    setShowPaywall(true);
+    openFilteredPaywall(targetType === 'statico' ? 'lifetime' : 'subscriptions');
   };
 
   const pickLogoImage = () => {
-    checkAccessAndExecute('customization', async () => {
+    checkAccessAndExecute('customization', 'dinamico', async () => {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permissionResult.granted) {
         triggerAlert("Permesso Negato", "Consenti l'accesso alla galleria.", "error");
@@ -50,17 +58,12 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
       }
     });
   };
-
   const handleDownload = (type) => {
     if (!text.trim()) {
       triggerAlert("Attenzione", "Digita un contenuto.", "info");
       return;
     }
-    if (type === 'statico' && premiumType !== 'vita') {
-      setShowPaywall(true);
-      return;
-    }
-    checkAccessAndExecute(type === 'statico' ? 'download_static' : 'download_dynamic', async () => {
+    checkAccessAndExecute('download', type, async () => {
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
         triggerAlert("Permesso Negato", "Abilita i permessi di archiviazione.", "error");
@@ -121,7 +124,7 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
         <Text style={styles.sectionLabel}>Personalizza Colore:</Text>
         <View style={styles.colorRow}>
           {['#000000', '#FF5733', '#20BF6B', '#3867D6'].map(c => (
-            <TouchableOpacity key={c} style={[styles.colorDot, { backgroundColor: c }, qrColor === c && styles.colorDotAct]} onPress={() => { if (c !== '#000000') { checkAccessAndExecute('customization', () => setQrColor(c)); } else { setQrColor(c); } }} />
+            <TouchableOpacity key={c} style={[styles.colorDot, { backgroundColor: c }, qrColor === c && styles.colorDotAct]} onPress={() => { if (c !== '#000000') { checkAccessAndExecute('customization', 'dinamico', () => setQrColor(c)); } else { setQrColor(c); } }} />
           ))}
         </View>
         {text.trim() ? (
@@ -130,7 +133,7 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
               <QRCode getRef={(c) => (svgRef.current = c)} value={RICKROLL_PREVIEW_URL} size={180} color={qrColor} backgroundColor="#FFF" logo={logoUri ? { uri: logoUri } : null} logoSize={42} logoBackgroundColor='white' logoBorderRadius={8} />
             </View>
             <TouchableOpacity style={styles.downBtnDynamic} onPress={() => handleDownload('dinamico')}><Text style={styles.downBtnText}>💾 SCARICA DINAMICO</Text></TouchableOpacity>
-            <TouchableOpacity style={[styles.downBtnStatic, premiumType !== 'vita' && { opacity: 0.5 }]} onPress={() => handleDownload('statico')}><Text style={styles.downBtnText}>👑 SCARICA STATICO</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.downBtnStatic} onPress={() => handleDownload('statico')}><Text style={styles.downBtnText}>👑 SCARICA STATICO</Text></TouchableOpacity>
           </View>
         ) : (
           <View style={styles.emptyBox}><Text style={styles.emptyText}>Digita qualcosa per l'anteprima...</Text></View>
