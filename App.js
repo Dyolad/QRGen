@@ -153,19 +153,20 @@ export default function App() {
         </View>
       </Modal>
 
-      <Modal animated transparent visible={scanned && currentTab === 'scanner'} onRequestClose={() => setScanned(false)}>
+      <Modal animated transparent visible={upsellModal} onRequestClose={() => setUpsellingModal(false)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>CONTENUTO RILEVATO</Text>
-            <Text style={styles.modalData}>{scanResult}</Text>
-            <View style={styles.modalRow}>
-              <TouchableOpacity style={styles.modalBtnAct} onPress={() => { setScanned(false); Linking.openURL(scanResult).catch(() => triggerAlert("Oops", "Impossibile aprire il testo come URL", "info")); }}>
-                <Text style={styles.modalBtnActT}>Apri Link</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalBtnClose} onPress={() => setScanned(false)}>
-                <Text style={styles.modalBtnCloseT}>Chiudi</Text>
-              </TouchableOpacity>
-            </View>
+          <View style={[styles.modalContent, { borderColor: '#D4AF37' }]}>
+            <Text style={[styles.modalTitle, { color: '#D4AF37' }]}>⚠️ LIMITE RAGGIUNTO</Text>
+            <Text style={styles.modalData}>Hai sfruttato al massimo il tuo piano mensile (max 10 QR). Scegli come continuare:</Text>
+            <TouchableOpacity style={styles.upsellBtnGold} onPress={() => { setPremiumType('annuale'); setIsPremium(true); setUpsellingModal(false); triggerAlert("Effettuato", "Sei passato al piano annuale illimitato!", "success"); }}>
+              <Text style={styles.upsellBtnTextDark}>🚀 PASSA ALL'ANNUALE (Illimitato)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.upsellBtnDark} onPress={() => { setUpsellingModal(false); triggerAlert("Acquisto", "Hai sbloccato 5 slot QR extra per 4,99 €", "success"); }}>
+              <Text style={styles.upsellBtnTextLight}>➕ Sblocca 5 QR extra (4,99 €)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={{ marginTop: 10 }} onPress={() => setUpsellingModal(false)}>
+              <Text style={{ color: '#637394', textDecorationLine: 'underline' }}>Annulla</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -189,10 +190,6 @@ const styles = StyleSheet.create({
   modalContent: { backgroundColor: '#141929', width: '100%', borderRadius: 24, padding: 24, borderWidth: 1, borderColor: '#2F3B5C', alignItems: 'center' },
   modalTitle: { fontSize: 13, fontWeight: '800', letterSpacing: 1.5, marginBottom: 15 },
   modalData: { color: '#FFF', fontSize: 15, textAlign: 'center', marginBottom: 25, lineHeight: 22 },
-  modalRow: { flexDirection: 'row', width: '100%' },
-  modalBtnAct: { flex: 1, backgroundColor: '#00ADB5', padding: 16, borderRadius: 16, alignItems: 'center', marginRight: 10 },
-  modalBtnActT: { color: '#FFF', fontWeight: '700' },
-  modalBtnClose: { flex: 1, backgroundColor: '#1F273D', padding: 16, borderRadius: 16, alignItems: 'center' },
   modalBtnCloseSingle: { backgroundColor: '#1F273D', padding: 16, borderRadius: 16, alignItems: 'center', width: '100%', marginTop: 5 },
   modalBtnCloseT: { color: '#FFF', fontWeight: '700', fontSize: 15, textAlign: 'center' },
   upsellBtnGold: { backgroundColor: '#D4AF37', width: '100%', padding: 16, borderRadius: 16, alignItems: 'center', marginBottom: 12 },
