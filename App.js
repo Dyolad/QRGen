@@ -25,6 +25,7 @@ export default function App() {
   const [premiumType, setPremiumType] = useState('none'); 
   const [hasAdReward, setHasAdReward] = useState(false); 
   const [showPaywall, setShowPaywall] = useState(false); 
+  const [paywallFilter, setPaywallFilter] = useState('all'); 
   const [currentTab, setCurrentTab] = useState('scanner'); 
   const [upsellModal, setUpsellingModal] = useState(false);
   const [customAlert, setCustomAlert] = useState({ visible: false, title: '', message: '', type: 'info' });
@@ -73,14 +74,8 @@ export default function App() {
       await AsyncStorage.setItem('@qr_history', JSON.stringify(newHistory));
     } catch (e) { console.log(e); }
   };
-
   const handleBarCodeScanned = ({ data }) => {
     setScanned(true);
-    if (data.includes('qr-pro-dynamic/free-') && !isPremium) {
-      triggerAlert("Link Scaduto", "Questo codice QR dinamico temporaneo è scaduto. Passa a Premium per sbloccarlo.", 'error');
-      setScanned(false);
-      return;
-    }
     const updatedHistory = [{ id: Date.now().toString(), data, type: 'Scansionato', date: new Date().toLocaleDateString() }, ...history];
     saveHistory(updatedHistory);
     setScanResult(data);
@@ -92,19 +87,26 @@ export default function App() {
     triggerAlert("🔋 Gettone Riscatto", "Hai sbloccato UNA singola operazione Pro con la pubblicità!", 'success');
   };
 
+  const openFilteredPaywall = (filterType) => {
+    setPaywallFilter(filterType);
+    setShowPaywall(true);
+  };
+
   if (showPaywall) {
-    return <Paywall setIsPremium={setIsPremium} setPremiumType={setPremiumType} setShowPaywall={setShowPaywall} onWatchAd={handleWatchAd} />;
+    return <Paywall setIsPremium={setIsPremium} setPremiumType={setPremiumType} setShowPaywall={setShowPaywall} onWatchAd={handleWatchAd} filter={paywallFilter} />;
   }
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>A D V A N C E D  Q R</Text>
-      {isPremium && <Text style={styles.proBadge}>👑 PRO ACTIVE ({premiumType.toUpperCase()})</Text>}
+      {isPremium && premiumType !== 'none' && (
+        <Text style={styles.proBadge}>👑 PRO ACTIVE ({premiumType.toUpperCase()})</Text>
+      )}
       {hasAdReward && !isPremium && <Text style={styles.adBadge}>📺 AD REWARD ACTIVE (1 USE)</Text>}
       
       <View style={styles.nav}>
         {['scanner', 'generator', 'history'].map(t => (
-          <TouchableOpacity key={t} style={[styles.navB, currentTab === t && styles.navAct]} onPress={() => setCurrentTab(t)}>
+          <TouchableOpacity key={t} style={[styles.navB, currentTab === t && styles.navAct]} onPress={() => { setCurrentTab(t); if(t === 'scanner') setScanned(false); }}>
             <Text style={[styles.navTxt, currentTab === t && styles.activeTxt]}>
               {t === 'scanner' ? 'Scanner' : t === 'generator' ? 'Crea' : 'Archivio'}
             </Text>
@@ -114,16 +116,9 @@ export default function App() {
 
       {currentTab === 'generator' && (
         <QRGenerator 
-          isPremium={isPremium} 
-          premiumType={premiumType}
-          hasAdReward={hasAdReward}
-          setHasAdReward={setHasAdReward}
-          setShowPaywall={setShowPaywall} 
-          history={history} 
-          saveHistory={saveHistory} 
-          triggerAlert={triggerAlert}
-          setUpsellingModal={setUpsellingModal}
-          scheduleExpiryNotification={scheduleExpiryNotification}
+          isPremium={isPremium} premiumType={premiumType} hasAdReward={hasAdReward} setHasAdReward={setHasAdReward}
+          openFilteredPaywall={openFilteredPaywall} history={history} saveHistory={saveHistory} triggerAlert={triggerAlert}
+          setUpsellingModal={setUpsellingModal} scheduleExpiryNotification={scheduleExpiryNotification}
         />
       )}
 
@@ -132,14 +127,12 @@ export default function App() {
           {permission && permission.granted ? (
             <CameraView onBarcodeScanned={scanned ? undefined : handleBarCodeScanned} style={StyleSheet.absoluteFillObject} />
           ) : (
-            <Text style={styles.whiteTxt}>In attesa dei permessi video...</Text>
+            <Text style={styles.whiteTxt} onPress={requestPermission}>Tocca qui per abilitare la fotocamera</Text>
           )}
         </View>
       )}
 
-      {currentTab === 'history' && (
-        <HistoryManager history={history} saveHistory={saveHistory} />
-      )}
+      {currentTab === 'history' && <HistoryManager history={history} saveHistory={saveHistory} />}
 
       <Modal animated transparent visible={customAlert.visible} onRequestClose={() => setCustomAlert({ ...customAlert, visible: false })}>
         <View style={styles.modalOverlay}>
@@ -164,9 +157,22 @@ export default function App() {
             <TouchableOpacity style={styles.upsellBtnDark} onPress={() => { setUpsellingModal(false); triggerAlert("Acquisto", "Hai sbloccato 5 slot QR extra per 4,99 €", "success"); }}>
               <Text style={styles.upsellBtnTextLight}>➕ Sblocca 5 QR extra (4,99 €)</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={{ marginTop: 10 }} onPress={() => setUpsellingModal(false)}>
-              <Text style={{ color: '#637394', textDecorationLine: 'underline' }}>Annulla</Text>
-            </TouchableOpacity>
+            <TouchableOpacity style={{ marginTop: 10 }} onPress={() => setUpsellingModal(false)}><Text style={{ color: '#637394', textDecorationLine: 'underline' }}>Annulla</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal animated transparent visible={scanned && currentTab === 'scanner'} onRequestClose={() => setScanned(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>CONTENUTO RILEVATO</Text>
+            <Text style={styles.modalData}>{scanResult}</Text>
+            <View style={styles.modalRow}>
+              <TouchableOpacity style={styles.modalBtnAct} onPress={() => { setScanned(false); Linking.openURL(scanResult).catch(() => triggerAlert("Oops", "Impossibile aprire il testo come URL", "info")); }}>
+                <Text style={styles.modalBtnActT}>Apri Link</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalBtnClose} onPress={() => setScanned(false)}><Text style={styles.modalBtnCloseT}>Chiudi</Text></TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -181,19 +187,14 @@ const styles = StyleSheet.create({
   adBadge: { color: '#00ADB5', fontSize: 11, fontWeight: '800', textAlign: 'center', marginBottom: 10, letterSpacing: 1 },
   nav: { flexDirection: 'row', backgroundColor: '#141929', marginHorizontal: 20, marginBottom: 20, borderRadius: 20, padding: 5, borderWidth: 1, borderColor: '#1F273D' },
   navB: { flex: 1, paddingVertical: 14, alignItems: 'center', borderRadius: 15 },
-  navAct: { backgroundColor: '#1F273D' },
-  navTxt: { color: '#637394', fontWeight: '700', fontSize: 14 },
-  activeTxt: { color: '#FFF' },
-  whiteTxt: { color: '#637394', textAlign: 'center', marginTop: 20 },
-  scanBox: { flex: 1, backgroundColor: '#000', marginBottom: 20, marginHorizontal: 20, borderRadius: 24, overflow: 'hidden' },
+  navAct: { backgroundColor: '#1F273D' }, navTxt: { color: '#637394', fontWeight: '700', fontSize: 14 }, activeTxt: { color: '#FFF' },
+  whiteTxt: { color: '#637394', textAlign: 'center', marginTop: 20 }, scanBox: { flex: 1, backgroundColor: '#000', marginBottom: 20, marginHorizontal: 20, borderRadius: 24, overflow: 'hidden' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(5,8,18,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { backgroundColor: '#141929', width: '100%', borderRadius: 24, padding: 24, borderWidth: 1, borderColor: '#2F3B5C', alignItems: 'center' },
-  modalTitle: { fontSize: 13, fontWeight: '800', letterSpacing: 1.5, marginBottom: 15 },
-  modalData: { color: '#FFF', fontSize: 15, textAlign: 'center', marginBottom: 25, lineHeight: 22 },
+  modalTitle: { fontSize: 13, fontWeight: '800', letterSpacing: 1.5, marginBottom: 15 }, modalData: { color: '#FFF', fontSize: 15, textAlign: 'center', marginBottom: 25, lineHeight: 22 },
   modalBtnCloseSingle: { backgroundColor: '#1F273D', padding: 16, borderRadius: 16, alignItems: 'center', width: '100%', marginTop: 5 },
   modalBtnCloseT: { color: '#FFF', fontWeight: '700', fontSize: 15, textAlign: 'center' },
   upsellBtnGold: { backgroundColor: '#D4AF37', width: '100%', padding: 16, borderRadius: 16, alignItems: 'center', marginBottom: 12 },
   upsellBtnDark: { backgroundColor: '#1F273D', width: '100%', padding: 16, borderRadius: 16, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#2F3B5C' },
-  upsellBtnTextDark: { color: '#090D1A', fontWeight: '800', fontSize: 14 },
-  upsellBtnTextLight: { color: '#FFF', fontWeight: '700', fontSize: 14 }
+  upsellBtnTextDark: { color: '#090D1A', fontWeight: '800', fontSize: 14 }, upsellBtnTextLight: { color: '#FFF', fontWeight: '700', fontSize: 14 }
 });
