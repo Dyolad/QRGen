@@ -115,10 +115,6 @@ export default function App() {
     setShowPaywall(true);
   };
 
-  if (showPaywall) {
-    return <Paywall setIsPremium={setIsPremium} setPremiumType={setPremiumType} setShowPaywall={setShowPaywall} onWatchAd={handleWatchAd} filter={paywallFilter} />;
-  }
-
   return (
     <View style={styles.container}>
       <Text style={styles.title}>A D V A N C E D  Q R</Text>
@@ -157,6 +153,10 @@ export default function App() {
 
       {currentTab === 'history' && <HistoryManager history={history} saveHistory={saveHistory} triggerAlert={triggerAlert} />}
 
+      <Modal animated visible={showPaywall} onRequestClose={() => setShowPaywall(false)}>
+        <Paywall setIsPremium={setIsPremium} setPremiumType={setPremiumType} setShowPaywall={setShowPaywall} onWatchAd={handleWatchAd} filter={paywallFilter} />
+      </Modal>
+
       <Modal animated transparent visible={customAlert.visible} onRequestClose={() => setCustomAlert({ ...customAlert, visible: false })}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { borderColor: customAlert.type === 'error' ? '#FF5C5C' : customAlert.type === 'success' ? '#20BF6B' : '#2F3B5C' }]}>
@@ -173,11 +173,16 @@ export default function App() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { borderColor: '#D4AF37' }]}>
             <Text style={[styles.modalTitle, { color: '#D4AF37' }]}>⚠️ LIMITE RAGGIUNTO</Text>
-            <Text style={styles.modalData}>Hai sfruttato al massimo il tuo piano mensile (max 10 QR). Scegli come continuare:</Text>
+            <Text style={styles.modalData}>Hai esaurito i tuoi QR Dinamici mensili. Scegli come continuare:</Text>
             <TouchableOpacity style={styles.upsellBtnGold} onPress={() => { setPremiumType('annuale'); setIsPremium(true); setUpsellingModal(false); triggerAlert("Effettuato", "Sei passato al piano annuale illimitato!", "success"); }}>
               <Text style={styles.upsellBtnTextDark}>🚀 PASSA ALL'ANNUALE (Illimitato)</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.upsellBtnDark} onPress={() => { setUpsellingModal(false); triggerAlert("Acquisto", "Hai sbloccato 5 slot QR extra per 4,99 €", "success"); }}>
+            <TouchableOpacity style={styles.upsellBtnDark} onPress={async () => { 
+              const currentExtra = parseInt(await AsyncStorage.getItem('@extra_slots_v3') || '0', 10);
+              await AsyncStorage.setItem('@extra_slots_v3', (currentExtra + 5).toString());
+              setUpsellingModal(false); 
+              triggerAlert("Acquisto Riuscito", "Hai sbloccato +5 slot QR extra!", "success"); 
+            }}>
               <Text style={styles.upsellBtnTextLight}>➕ Sblocca 5 QR extra (4,99 €)</Text>
             </TouchableOpacity>
             <TouchableOpacity style={{ marginTop: 10 }} onPress={() => setUpsellingModal(false)}><Text style={{ color: '#637394', textDecorationLine: 'underline' }}>Annulla</Text></TouchableOpacity>
