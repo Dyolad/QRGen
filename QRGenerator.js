@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from './styles';
 
 const SUPABASE_URL = "https://bgaajjgdyeyfblfxasxb.supabase.co/rest/v1/"
-const SUPABASE_KEY = "sb_publishable_BAys6XNmda-GHNX6P2Db8A_YZgRU79o";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJnYWFqamdkeWV5ZmJsZnhhc3hiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5OTU0MTMsImV4cCI6MjEwNzU3MTQxM30.-hIIgm5ib6tJWCmwKRumeatYMQJan6WYK-MLH_zhYt8";
 
 export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHasAdReward, openFilteredPaywall, history, saveHistory, triggerAlert, setUpsellingModal, scheduleExpiryNotification }) {
   const [text, setText] = useState('');
