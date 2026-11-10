@@ -1,18 +1,29 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
 
-export function Paywall({ setIsPremium, setShowPaywall, onWatchAd }) {
+export function Paywall({ setIsPremium, setPremiumType, setShowPaywall, onWatchAd, filter }) {
+  const handlePurchase = (type) => {
+    setPremiumType(type);
+    setIsPremium(true);
+    setShowPaywall(false);
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.centerScroll} style={styles.paywall}>
       <Text style={styles.paywallTitle}>⚡ ADVANCED QR PRO 👑</Text>
-      <Text style={styles.paywallSub}>Sblocca il pieno potenziale commerciale e grafico della tua applicazione</Text>
+      <Text style={styles.paywallSub}>
+        {filter === 'lifetime' 
+          ? 'I QR Statici non scadono mai e richiedono lo Sblocco a Vita' 
+          : 'Sblocca il pieno potenziale commerciale e grafico della tua applicazione'}
+      </Text>
       
       <View style={styles.featuresBox}>
         {[
           '🎨 Cambia colori e aggiungi Loghi Centrali', 
           '🔗 Crea QR Dinamici permanenti (Senza Scadenza)', 
           '📁 Archivio dati illimitato con suddivisione Categorie', 
-          '💾 Scarica ed esporta i file direttamente in Galleria (PNG)'
+          '💾 Scarica ed esporta i file direttamente in Galleria (PNG)',
+          '👑 QR Statici illimitati e senza scadenza (Solo piano a Vita)'
         ].map((f, i) => (
           <View key={i} style={styles.featRow}>
             <Text style={styles.feat}>{f}</Text>
@@ -20,20 +31,26 @@ export function Paywall({ setIsPremium, setShowPaywall, onWatchAd }) {
         ))}
       </View>
       
-      <TouchableOpacity style={styles.adBtn} onPress={onWatchAd}>
-        <Text style={styles.adBtnT}>📺 Sblocca funzioni Pro per questa sessione (Vedi Video)</Text>
-      </TouchableOpacity>
+      {filter !== 'lifetime' && (
+        <TouchableOpacity style={styles.adBtn} onPress={onWatchAd}>
+          <Text style={styles.adBtnT}>📺 Sblocca 1 singola azione (Guarda Video)</Text>
+        </TouchableOpacity>
+      )}
 
-      <TouchableOpacity style={styles.pBtn} onPress={() => { setIsPremium(true); setShowPaywall(false); }}>
-        <Text style={styles.pBtnT}>Mensile — 1,99 € / mese (3gg gratis)</Text>
-      </TouchableOpacity>
+      {filter !== 'lifetime' && (
+        <>
+          <TouchableOpacity style={styles.pBtn} onPress={() => handlePurchase('mensile')}>
+            <Text style={styles.pBtnT}>Mensile — 1,99 € / mese (Max 10 QR)</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.pBtn} onPress={() => handlePurchase('annuale')}>
+            <Text style={styles.pBtnT}>Annuale — 14,99 € / anno (Illimitati)</Text>
+          </TouchableOpacity>
+        </>
+      )}
       
-      <TouchableOpacity style={styles.pBtn} onPress={() => { setIsPremium(true); setShowPaywall(false); }}>
-        <Text style={styles.pBtnT}>Annuale — 14,99 € / anno</Text>
-      </TouchableOpacity>
-      
-      <TouchableOpacity style={styles.pBtn} onPress={() => { setIsPremium(true); setShowPaywall(false); }}>
-        <Text style={styles.pBtnT}>Sblocco a Vita — 24,99 €</Text>
+      <TouchableOpacity style={[styles.pBtn, styles.lifetimeBtn]} onPress={() => handlePurchase('vita')}>
+        <Text style={styles.pBtnT}>👑 Sblocco a Vita — 24,99 € (Tutto + Statici)</Text>
       </TouchableOpacity>
       
       <TouchableOpacity style={styles.closeBtn} onPress={() => setShowPaywall(false)}>
@@ -52,6 +69,7 @@ const styles = StyleSheet.create({
   featRow: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#20293A' },
   feat: { fontSize: 14, color: '#E2E8F0', fontWeight: '600' },
   pBtn: { backgroundColor: '#D4AF37', padding: 16, borderRadius: 14, marginBottom: 12, alignItems: 'center' },
+  lifetimeBtn: { borderWidth: 2, borderColor: '#FFF' },
   pBtnT: { fontSize: 15, fontWeight: '700', color: '#0B0F19' },
   adBtn: { backgroundColor: '#161B26', padding: 16, borderRadius: 14, marginBottom: 15, alignItems: 'center', borderWidth: 1, borderColor: '#00ADB5' },
   adBtnT: { fontSize: 14, fontWeight: '700', color: '#00ADB5' },
