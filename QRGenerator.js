@@ -15,37 +15,58 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
   const [qrColor, setQrColor] = useState('#000000');
   const [logoUri, setLogoUri] = useState(null);
   const [totalDynamicCount, setTotalDynamicCount] = useState(0);
-  const [adDynamicCount, setAdDynamicCount] = useState(0);
+  const [adActionCount, setAdActionCount] = useState(0);
   const svgRef = useRef(null);
-  const RICKROLL_PREVIEW_URL = "https://youtube.com";
+  const RICKROLL_PREVIEW_URL = "https://youtu.be";
 
   useEffect(() => {
     (async () => {
       try {
         const storedTotal = await AsyncStorage.getItem('@total_dynamic_count');
-        const storedAd = await AsyncStorage.getItem('@ad_dynamic_count');
+        const storedAd = await AsyncStorage.getItem('@ad_action_count');
         if (storedTotal) setTotalDynamicCount(parseInt(storedTotal, 10));
-        if (storedAd) setAdDynamicCount(parseInt(storedAd, 10));
+        if (storedAd) setAdActionCount(parseInt(storedAd, 10));
       } catch (e) { console.log(e); }
     })();
   }, []);
 
-  const incrementCounters = async (isAd) => {
+  const cleanAndShortenUrl = (rawInput) => {
+    let clean = rawInput.trim();
+    if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+      return clean;
+    }
     try {
-      const newTotal = totalDynamicCount + 1;
-      setTotalDynamicCount(newTotal);
-      await AsyncStorage.setItem('@total_dynamic_count', newTotal.toString());
-      if (isAd) {
-        const newAd = adDynamicCount + 1;
-        setAdDynamicCount(newAd);
-        await AsyncStorage.setItem('@ad_dynamic_count', newAd.toString());
+      const ytMatch = clean.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+      if (ytMatch && ytMatch[1]) {
+        return `https://youtu.be{ytMatch[1]}`;
+      }
+      const urlObj = new URL(clean);
+      const paramsToRemove = ['si', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid'];
+      paramsToRemove.forEach(p => urlObj.searchParams.delete(p));
+      return urlObj.toString();
+    } catch (e) {
+      return clean;
+    }
+  };
+
+  const incrementCounters = async (isDynamic, usedAd) => {
+    try {
+      if (isDynamic) {
+        const newTotal = totalDynamicCount + 1;
+        setTotalDynamicCount(newTotal);
+        await AsyncStorage.setItem('@total_dynamic_count', newTotal.toString());
+      }
+      if (usedAd) {
+        const newAd = adActionCount + 1;
+        setAdActionCount(newAd);
+        await AsyncStorage.setItem('@ad_action_count', newAd.toString());
       }
     } catch (e) { console.log(e); }
   };
 
   const checkAccessAndExecute = (actionType, targetType, successCallback) => {
     if (isPremium) {
-      if (premiumType === 'mensile' && totalDynamicCount >= 10 && actionType === 'download') {
+      if (premiumType === 'mensile' && totalDynamicCount >= 10 && actionType === 'download' && targetType === 'dinamico') {
         setUpsellingModal(true);
         return;
       }
@@ -61,21 +82,20 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
         openFilteredPaywall('lifetime');
         return;
       }
-      if (actionType === 'download' && targetType === 'dinamico' && adDynamicCount >= 3) {
-        triggerAlert("Limite Raggiunto", "Hai esaurito i 3 QR Dinamici gratuiti con pubblicità. Passa a Pro per continuare!", "error");
+      if (adActionCount >= 10) {
+        triggerAlert("Limite Raggiunto", "Hai esaurito le 10 azioni gratuite con pubblicità. Passa a Pro!", "error");
         openFilteredPaywall('subscriptions');
         return;
       }
+      setHasAdReward(false);
       successCallback(true);
-      setHasAdReward(false); 
-      triggerAlert("Gettone Consumato", "Azione Premium completata!", "success");
       return;
     }
     openFilteredPaywall(targetType === 'statico' ? 'lifetime' : 'subscriptions');
   };
 
   const pickLogoImage = () => {
-    checkAccessAndExecute('customization', 'dinamico', async () => {
+    checkAccessAndExecute('customization', 'dinamico', async (usedAd) => {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permissionResult.granted) {
         triggerAlert("Permesso Negato", "Consenti l'accesso alla galleria.", "error");
@@ -88,6 +108,7 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
       });
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setLogoUri(result.assets[0].uri);
+        if (usedAd) await incrementCounters(false, true);
       }
     });
   };
@@ -103,7 +124,10 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
         triggerAlert("Permesso Negato", "Abilita i permessi di archiviazione.", "error");
         return;
       }
-      let finalQRValue = text;
+      const optimizedContent = cleanAndShortenUrl(text);
+      let finalQRValue = optimizedContent;
+      let recordId = Date.now().toString();
+
       if (type === 'dinamico') {
         try {
           const daysToLive = premiumType === 'none' ? 7 : 30;
@@ -114,10 +138,11 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
             headers: {
               'Content-Type': 'application/json',
               'apikey': SUPABASE_KEY,
-              'Authorization': `Bearer ${SUPABASE_KEY}`
+              'Authorization': `Bearer ${SUPABASE_KEY}`,
+              'Prefer': 'return=representation'
             },
             body: JSON.stringify({
-              destination_url: text,
+              destination_url: optimizedContent,
               is_dynamic: true,
               expires_at: expiryDate.toISOString(),
               premium_type: premiumType,
@@ -125,19 +150,24 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
             })
           });
           if (response.ok) {
-            finalQRValue = `${SUPABASE_URL}/redirect?id=${Date.now()}`;
-            await incrementCounters(usedAd);
+            const data = await response.json();
+            const dbId = (data && data[0] && data[0].id) ? data[0].id : recordId;
+            finalQRValue = `${SUPABASE_URL}/redirect?id=${dbId}`;
+            await incrementCounters(true, usedAd);
             if (premiumType === 'none') scheduleExpiryNotification(7);
           }
         } catch (err) { console.log(err); }
+      } else if (usedAd) {
+        await incrementCounters(false, true);
       }
+
       if (svgRef.current) {
         svgRef.current.toDataURL(async (dataURL) => {
           try {
             const path = `${FileSystem.documentDirectory}QR_${Date.now()}.png`;
             await FileSystem.writeAsStringAsync(path, dataURL, { encoding: FileSystem.EncodingType.Base64 });
             await MediaLibrary.saveToLibraryAsync(path);
-            saveHistory([{ id: Date.now().toString(), data: finalQRValue, type: type === 'dinamico' ? 'Dinamico' : 'Statico', date: new Date().toLocaleDateString() }, ...history]);
+            saveHistory([{ id: recordId, data: optimizedContent, qrUrl: finalQRValue, type: type === 'dinamico' ? 'Dinamico' : 'Statico', date: new Date().toLocaleDateString() }, ...history]);
             triggerAlert("🏆 Scaricato!", "Codice salvato in Galleria.", "success");
           } catch (err) { triggerAlert("Errore", "Impossibile scaricare.", "error"); }
         });
@@ -148,7 +178,7 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
   return (
     <View style={styles.mainContainer}>
       <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <TextInput style={styles.input} placeholder="Inserisci il link..." placeholderTextColor="#4E5D78" value={text} onChangeText={setText} />
+        <TextInput style={styles.input} placeholder="Inserisci il link o testo..." placeholderTextColor="#4E5D78" value={text} onChangeText={setText} />
         <Text style={styles.sectionLabel}>Logo Centrale:</Text>
         <View style={styles.row}>
           <TouchableOpacity style={[styles.toggleBtn, logoUri && styles.toggleAct, { marginRight: logoUri ? 10 : 0 }]} onPress={pickLogoImage}>
@@ -159,7 +189,16 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
         <Text style={styles.sectionLabel}>Personalizza Colore:</Text>
         <View style={styles.colorRow}>
           {['#000000', '#FF5733', '#20BF6B', '#3867D6'].map(c => (
-            <TouchableOpacity key={c} style={[styles.colorDot, { backgroundColor: c }, qrColor === c && styles.colorDotAct]} onPress={() => { if (c !== '#000000') { checkAccessAndExecute('customization', 'dinamico', () => setQrColor(c)); } else { setQrColor(c); } }} />
+            <TouchableOpacity key={c} style={[styles.colorDot, { backgroundColor: c }, qrColor === c && styles.colorDotAct]} onPress={() => { 
+              if (c !== '#000000') { 
+                checkAccessAndExecute('customization', 'dinamico', async (usedAd) => {
+                  setQrColor(c);
+                  if (usedAd) await incrementCounters(false, true);
+                }); 
+              } else { 
+                setQrColor(c); 
+              } 
+            }} />
           ))}
         </View>
         {text.trim() ? (
