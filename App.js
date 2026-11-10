@@ -82,7 +82,7 @@ export default function App() {
     setScanned(true);
     let resolvedData = data;
 
-    if (data.startsWith(`${SUPABASE_URL}/redirect?id=`)) {
+    if (data.startsWith(`${SUPABASE_URL}/functions/v1/redirect?id=`)) {
       try {
         const idPart = data.split('id=')[1];
         const response = await fetch(`${SUPABASE_URL}/rest/v1/qr_codes?id=eq.${idPart}&select=destination_url`, {
