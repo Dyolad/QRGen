@@ -152,7 +152,7 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
           if (response.ok) {
             const data = await response.json();
             const dbId = (data && data[0] && data[0].id) ? data[0].id : recordId;
-            finalQRValue = `${SUPABASE_URL}/redirect?id=${dbId}`;
+            finalQRValue = `${SUPABASE_URL}/functions/v1/redirect?id=${dbId}`;
             await incrementCounters(true, usedAd);
             if (premiumType === 'none') scheduleExpiryNotification(7);
           }
