@@ -1,9 +1,11 @@
-import React, { useState, useRef } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { Text, View, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { styles } from './styles';
 
 const SUPABASE_URL = "https://supabase.co";
 const SUPABASE_KEY = "sb_publishable_BAys6XNmda-GHNX6P2Db8A_YZgRU79o";
@@ -12,12 +14,38 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
   const [text, setText] = useState('');
   const [qrColor, setQrColor] = useState('#000000');
   const [logoUri, setLogoUri] = useState(null);
+  const [totalDynamicCount, setTotalDynamicCount] = useState(0);
+  const [adDynamicCount, setAdDynamicCount] = useState(0);
   const svgRef = useRef(null);
   const RICKROLL_PREVIEW_URL = "https://youtube.com";
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const storedTotal = await AsyncStorage.getItem('@total_dynamic_count');
+        const storedAd = await AsyncStorage.getItem('@ad_dynamic_count');
+        if (storedTotal) setTotalDynamicCount(parseInt(storedTotal, 10));
+        if (storedAd) setAdDynamicCount(parseInt(storedAd, 10));
+      } catch (e) { console.log(e); }
+    })();
+  }, []);
+
+  const incrementCounters = async (isAd) => {
+    try {
+      const newTotal = totalDynamicCount + 1;
+      setTotalDynamicCount(newTotal);
+      await AsyncStorage.setItem('@total_dynamic_count', newTotal.toString());
+      if (isAd) {
+        const newAd = adDynamicCount + 1;
+        setAdDynamicCount(newAd);
+        await AsyncStorage.setItem('@ad_dynamic_count', newAd.toString());
+      }
+    } catch (e) { console.log(e); }
+  };
+
   const checkAccessAndExecute = (actionType, targetType, successCallback) => {
     if (isPremium) {
-      if (premiumType === 'mensile' && history.filter(h => h.type === 'Dinamico').length >= 10 && actionType === 'download_dynamic') {
+      if (premiumType === 'mensile' && totalDynamicCount >= 10 && actionType === 'download') {
         setUpsellingModal(true);
         return;
       }
@@ -25,7 +53,7 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
         openFilteredPaywall('lifetime');
         return;
       }
-      successCallback();
+      successCallback(false);
       return;
     }
     if (hasAdReward) {
@@ -33,7 +61,12 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
         openFilteredPaywall('lifetime');
         return;
       }
-      successCallback();
+      if (actionType === 'download' && targetType === 'dinamico' && adDynamicCount >= 3) {
+        triggerAlert("Limite Raggiunto", "Hai esaurito i 3 QR Dinamici gratuiti con pubblicità. Passa a Pro per continuare!", "error");
+        openFilteredPaywall('subscriptions');
+        return;
+      }
+      successCallback(true);
       setHasAdReward(false); 
       triggerAlert("Gettone Consumato", "Azione Premium completata!", "success");
       return;
@@ -54,16 +87,17 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
         quality: 1,
       });
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setLogoUri(result.assets.uri);
+        setLogoUri(result.assets[0].uri);
       }
     });
   };
+
   const handleDownload = (type) => {
     if (!text.trim()) {
       triggerAlert("Attenzione", "Digita un contenuto.", "info");
       return;
     }
-    checkAccessAndExecute('download', type, async () => {
+    checkAccessAndExecute('download', type, async (usedAd) => {
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
         triggerAlert("Permesso Negato", "Abilita i permessi di archiviazione.", "error");
@@ -75,7 +109,7 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
           const daysToLive = premiumType === 'none' ? 7 : 30;
           const expiryDate = new Date();
           expiryDate.setDate(expiryDate.getDate() + daysToLive);
-          const response = await fetch(`${SUPABASE_URL}qr_codes`, {
+          const response = await fetch(`${SUPABASE_URL}/rest/v1/qr_codes`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -91,7 +125,8 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
             })
           });
           if (response.ok) {
-            finalQRValue = `${SUPABASE_URL}redirect?id=${Date.now()}`;
+            finalQRValue = `${SUPABASE_URL}/redirect?id=${Date.now()}`;
+            await incrementCounters(usedAd);
             if (premiumType === 'none') scheduleExpiryNotification(7);
           }
         } catch (err) { console.log(err); }
@@ -142,21 +177,3 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  mainContainer: { flex: 1 }, scrollContainer: { flex: 1 }, scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
-  input: { backgroundColor: '#141929', color: '#FFF', padding: 18, borderRadius: 16, marginBottom: 20, fontSize: 15, borderWidth: 1, borderColor: '#1F273D' },
-  row: { flexDirection: 'row', marginBottom: 15 },
-  toggleBtn: { backgroundColor: '#141929', padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#1F273D', flex: 1, alignItems: 'center' },
-  toggleAct: { backgroundColor: '#00ADB5', borderColor: '#00ADB5' },
-  removeBtn: { backgroundColor: '#291419', padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#4A1D24', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 15 },
-  removeBtnT: { color: '#FF5C5C', fontWeight: '700', fontSize: 14 }, whiteTxt: { color: '#FFF', fontWeight: '700', fontSize: 14 },
-  sectionLabel: { color: '#637394', marginBottom: 10, fontWeight: '700', fontSize: 13, letterSpacing: 0.5 },
-  colorRow: { flexDirection: 'row', marginBottom: 25 }, colorDot: { width: 40, height: 40, borderRadius: 20, marginRight: 15, borderWidth: 3, borderColor: '#141929' }, colorDotAct: { borderColor: '#00ADB5' },
-  centerWrapper: { alignItems: 'center', marginTop: 10, width: '100%' }, qrBox: { alignItems: 'center', backgroundColor: '#FFF', padding: 24, borderRadius: 24, width: 228, marginBottom: 20 },
-  emptyBox: { marginTop: 10, height: 228, borderStyle: 'dashed', borderWidth: 2, borderColor: '#1F273D', borderRadius: 24, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  emptyText: { color: '#4E5D78', textAlign: 'center', fontSize: 14, fontWeight: '600' },
-  downBtnDynamic: { backgroundColor: '#20BF6B', width: 250, padding: 16, borderRadius: 18, marginBottom: 12, alignItems: 'center' },
-  downBtnStatic: { backgroundColor: '#D4AF37', width: 250, padding: 16, borderRadius: 18, alignItems: 'center' },
-  downBtnText: { color: '#FFF', fontWeight: '800', fontSize: 13 }
-});
