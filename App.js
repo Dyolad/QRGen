@@ -8,7 +8,7 @@ import { Paywall } from './PremiumFeatures';
 import QRGenerator from './QRGenerator'; 
 import HistoryManager from './HistoryManager'; 
 
-const SUPABASE_URL = "https://supabase.co";
+const SUPABASE_URL = "https://bgaajjgdyeyfblfxasxb.supabase.co/rest/v1/"
 const SUPABASE_KEY = "sb_publishable_BAys6XNmda-GHNX6P2Db8A_YZgRU79o";
 
 Notifications.setNotificationHandler({
