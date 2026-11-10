@@ -8,6 +8,9 @@ import { Paywall } from './PremiumFeatures';
 import QRGenerator from './QRGenerator'; 
 import HistoryManager from './HistoryManager'; 
 
+const SUPABASE_URL = "https://supabase.co";
+const SUPABASE_KEY = "sb_publishable_BAys6XNmda-GHNX6P2Db8A_YZgRU79o";
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -74,13 +77,33 @@ export default function App() {
       await AsyncStorage.setItem('@qr_history', JSON.stringify(newHistory));
     } catch (e) { console.log(e); }
   };
-  const handleBarCodeScanned = ({ data }) => {
-    setScanned(true);
-    const updatedHistory = [{ id: Date.now().toString(), data, type: 'Scansionato', date: new Date().toLocaleDateString() }, ...history];
-    saveHistory(updatedHistory);
-    setScanResult(data);
-  };
 
+  const handleBarCodeScanned = async ({ data }) => {
+    setScanned(true);
+    let resolvedData = data;
+
+    if (data.startsWith(`${SUPABASE_URL}/redirect?id=`)) {
+      try {
+        const idPart = data.split('id=')[1];
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/qr_codes?id=eq.${idPart}&select=destination_url`, {
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`
+          }
+        });
+        if (response.ok) {
+          const rows = await response.json();
+          if (rows && rows.length > 0 && rows[0].destination_url) {
+            resolvedData = rows[0].destination_url;
+          }
+        }
+      } catch (e) { console.log(e); }
+    }
+
+    const updatedHistory = [{ id: Date.now().toString(), data: resolvedData, type: 'Scansionato', date: new Date().toLocaleDateString() }, ...history];
+    saveHistory(updatedHistory);
+    setScanResult(resolvedData);
+  };
   const handleWatchAd = () => {
     setHasAdReward(true); 
     setShowPaywall(false);
@@ -132,7 +155,7 @@ export default function App() {
         </View>
       )}
 
-      {currentTab === 'history' && <HistoryManager history={history} saveHistory={saveHistory} />}
+      {currentTab === 'history' && <HistoryManager history={history} saveHistory={saveHistory} triggerAlert={triggerAlert} />}
 
       <Modal animated transparent visible={customAlert.visible} onRequestClose={() => setCustomAlert({ ...customAlert, visible: false })}>
         <View style={styles.modalOverlay}>
@@ -165,13 +188,15 @@ export default function App() {
       <Modal animated transparent visible={scanned && currentTab === 'scanner'} onRequestClose={() => setScanned(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>CONTENUTO RILEVATO</Text>
+            <Text style={[styles.modalTitle, { color: '#00ADB5' }]}>CONTENUTO RILEVATO</Text>
             <Text style={styles.modalData}>{scanResult}</Text>
             <View style={styles.modalRow}>
-              <TouchableOpacity style={styles.modalBtnAct} onPress={() => { setScanned(false); Linking.openURL(scanResult).catch(() => triggerAlert("Oops", "Impossibile aprire il testo come URL", "info")); }}>
-                <Text style={styles.modalBtnActT}>Apri Link</Text>
+              <TouchableOpacity style={styles.modalBtnAct} onPress={() => { setScanned(false); Linking.openURL(scanResult).catch(() => triggerAlert("Info", "Il contenuto è un testo semplice, non un link web.", "info")); }}>
+                <Text style={styles.modalBtnActT}>🌐 Apri Link</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalBtnClose} onPress={() => setScanned(false)}><Text style={styles.modalBtnCloseT}>Chiudi</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.modalBtnClose} onPress={() => setScanned(false)}>
+                <Text style={styles.modalBtnCloseT}>Chiudi</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -192,8 +217,12 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(5,8,18,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { backgroundColor: '#141929', width: '100%', borderRadius: 24, padding: 24, borderWidth: 1, borderColor: '#2F3B5C', alignItems: 'center' },
   modalTitle: { fontSize: 13, fontWeight: '800', letterSpacing: 1.5, marginBottom: 15 }, modalData: { color: '#FFF', fontSize: 15, textAlign: 'center', marginBottom: 25, lineHeight: 22 },
+  modalRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-between', gap: 12 },
+  modalBtnAct: { flex: 1, backgroundColor: '#00ADB5', paddingVertical: 15, paddingHorizontal: 12, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  modalBtnActT: { color: '#090D1A', fontWeight: '800', fontSize: 14 },
+  modalBtnClose: { flex: 1, backgroundColor: '#1F273D', paddingVertical: 15, paddingHorizontal: 12, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#2F3B5C' },
   modalBtnCloseSingle: { backgroundColor: '#1F273D', padding: 16, borderRadius: 16, alignItems: 'center', width: '100%', marginTop: 5 },
-  modalBtnCloseT: { color: '#FFF', fontWeight: '700', fontSize: 15, textAlign: 'center' },
+  modalBtnCloseT: { color: '#FFF', fontWeight: '700', fontSize: 14, textAlign: 'center' },
   upsellBtnGold: { backgroundColor: '#D4AF37', width: '100%', padding: 16, borderRadius: 16, alignItems: 'center', marginBottom: 12 },
   upsellBtnDark: { backgroundColor: '#1F273D', width: '100%', padding: 16, borderRadius: 16, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#2F3B5C' },
   upsellBtnTextDark: { color: '#090D1A', fontWeight: '800', fontSize: 14 }, upsellBtnTextLight: { color: '#FFF', fontWeight: '700', fontSize: 14 }
