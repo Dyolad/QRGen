@@ -14,17 +14,18 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
   const [text, setText] = useState('');
   const [qrColor, setQrColor] = useState('#000000');
   const [logoUri, setLogoUri] = useState(null);
-  const [totalDynamicCount, setTotalDynamicCount] = useState(0);
+  const [monthlyCount, setMonthlyCount] = useState(0);
   const [adActionCount, setAdActionCount] = useState(0);
-  const svgRef = useRef(null);
-  const RICKROLL_PREVIEW_URL = "https://youtu.be";
+  const [realQrValueForExport, setRealQrValueForExport] = useState('');
+  const downloadSvgRef = useRef(null);
+  const RICKROLL_PREVIEW_URL = "https://youtu.be" + "dQw4w9WgXcQ";
 
   useEffect(() => {
     (async () => {
       try {
-        const storedTotal = await AsyncStorage.getItem('@total_dynamic_count');
-        const storedAd = await AsyncStorage.getItem('@ad_action_count');
-        if (storedTotal) setTotalDynamicCount(parseInt(storedTotal, 10));
+        const storedMonthly = await AsyncStorage.getItem('@monthly_qr_v3');
+        const storedAd = await AsyncStorage.getItem('@ad_uses_v3');
+        if (storedMonthly) setMonthlyCount(parseInt(storedMonthly, 10));
         if (storedAd) setAdActionCount(parseInt(storedAd, 10));
       } catch (e) { console.log(e); }
     })();
@@ -38,7 +39,7 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
     try {
       const ytMatch = clean.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
       if (ytMatch && ytMatch[1]) {
-        return `https://youtu.be{ytMatch[1]}`;
+        return "https://youtu.be" + ytMatch[1];
       }
       const urlObj = new URL(clean);
       const paramsToRemove = ['si', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid'];
@@ -49,26 +50,30 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
     }
   };
 
-  const incrementCounters = async (isDynamic, usedAd) => {
+  const recordAdUse = async () => {
     try {
-      if (isDynamic) {
-        const newTotal = totalDynamicCount + 1;
-        setTotalDynamicCount(newTotal);
-        await AsyncStorage.setItem('@total_dynamic_count', newTotal.toString());
-      }
-      if (usedAd) {
-        const newAd = adActionCount + 1;
-        setAdActionCount(newAd);
-        await AsyncStorage.setItem('@ad_action_count', newAd.toString());
-      }
+      const nextAd = adActionCount + 1;
+      setAdActionCount(nextAd);
+      await AsyncStorage.setItem('@ad_uses_v3', nextAd.toString());
     } catch (e) { console.log(e); }
   };
 
-  const checkAccessAndExecute = (actionType, targetType, successCallback) => {
+  const recordMonthlyQr = async () => {
+    try {
+      const nextMonthly = monthlyCount + 1;
+      setMonthlyCount(nextMonthly);
+      await AsyncStorage.setItem('@monthly_qr_v3', nextMonthly.toString());
+    } catch (e) { console.log(e); }
+  };
+
+  const checkAccessAndExecute = async (actionType, targetType, successCallback) => {
     if (isPremium) {
-      if (premiumType === 'mensile' && totalDynamicCount >= 10 && actionType === 'download' && targetType === 'dinamico') {
-        setUpsellingModal(true);
-        return;
+      if (premiumType === 'mensile' && actionType === 'download' && targetType === 'dinamico') {
+        const extra = parseInt(await AsyncStorage.getItem('@extra_slots_v3') || '0', 10);
+        if (monthlyCount >= (20 + extra)) {
+          setUpsellingModal(true);
+          return;
+        }
       }
       if (targetType === 'statico' && premiumType !== 'vita') {
         openFilteredPaywall('lifetime');
@@ -77,23 +82,26 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
       successCallback(false);
       return;
     }
+
+    if (adActionCount >= 5) {
+      setHasAdReward(false);
+      triggerAlert("Limite Pubblicità Raggiunto", "Hai esaurito le 5 azioni gratuite con pubblicità. Scegli un piano Pro!", "error");
+      openFilteredPaywall(targetType === 'statico' ? 'lifetime' : 'subscriptions');
+      return;
+    }
+
     if (hasAdReward) {
       if (targetType === 'statico') {
         openFilteredPaywall('lifetime');
-        return;
-      }
-      if (adActionCount >= 10) {
-        triggerAlert("Limite Raggiunto", "Hai esaurito le 10 azioni gratuite con pubblicità. Passa a Pro!", "error");
-        openFilteredPaywall('subscriptions');
         return;
       }
       setHasAdReward(false);
       successCallback(true);
       return;
     }
+
     openFilteredPaywall(targetType === 'statico' ? 'lifetime' : 'subscriptions');
   };
-
   const pickLogoImage = () => {
     checkAccessAndExecute('customization', 'dinamico', async (usedAd) => {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -108,7 +116,7 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
       });
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setLogoUri(result.assets[0].uri);
-        if (usedAd) await incrementCounters(false, true);
+        if (usedAd) await recordAdUse();
       }
     });
   };
@@ -124,6 +132,7 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
         triggerAlert("Permesso Negato", "Abilita i permessi di archiviazione.", "error");
         return;
       }
+
       const optimizedContent = cleanAndShortenUrl(text);
       let finalQRValue = optimizedContent;
       let recordId = Date.now().toString();
@@ -153,25 +162,36 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
             const data = await response.json();
             const dbId = (data && data[0] && data[0].id) ? data[0].id : recordId;
             finalQRValue = `${SUPABASE_URL}/functions/v1/redirect?id=${dbId}`;
-            await incrementCounters(true, usedAd);
+            if (premiumType === 'mensile') await recordMonthlyQr();
+            if (usedAd) await recordAdUse();
             if (premiumType === 'none') scheduleExpiryNotification(7);
+          } else {
+            triggerAlert("Errore Server", "Impossibile salvare il QR Dinamico su Supabase.", "error");
+            return;
           }
-        } catch (err) { console.log(err); }
+        } catch (err) {
+          triggerAlert("Errore Rete", "Controlla la connessione internet.", "error");
+          return;
+        }
       } else if (usedAd) {
-        await incrementCounters(false, true);
+        await recordAdUse();
       }
 
-      if (svgRef.current) {
-        svgRef.current.toDataURL(async (dataURL) => {
-          try {
-            const path = `${FileSystem.documentDirectory}QR_${Date.now()}.png`;
-            await FileSystem.writeAsStringAsync(path, dataURL, { encoding: FileSystem.EncodingType.Base64 });
-            await MediaLibrary.saveToLibraryAsync(path);
-            saveHistory([{ id: recordId, data: optimizedContent, qrUrl: finalQRValue, type: type === 'dinamico' ? 'Dinamico' : 'Statico', date: new Date().toLocaleDateString() }, ...history]);
-            triggerAlert("🏆 Scaricato!", "Codice salvato in Galleria.", "success");
-          } catch (err) { triggerAlert("Errore", "Impossibile scaricare.", "error"); }
-        });
-      }
+      setRealQrValueForExport(finalQRValue);
+
+      setTimeout(() => {
+        if (downloadSvgRef.current) {
+          downloadSvgRef.current.toDataURL(async (dataURL) => {
+            try {
+              const path = `${FileSystem.documentDirectory}QR_${Date.now()}.png`;
+              await FileSystem.writeAsStringAsync(path, dataURL, { encoding: FileSystem.EncodingType.Base64 });
+              await MediaLibrary.saveToLibraryAsync(path);
+              saveHistory([{ id: recordId, data: optimizedContent, qrUrl: finalQRValue, type: type === 'dinamico' ? 'Dinamico' : 'Statico', date: new Date().toLocaleDateString() }, ...history]);
+              triggerAlert("🏆 Scaricato!", "Codice salvato in Galleria.", "success");
+            } catch (err) { triggerAlert("Errore", "Impossibile salvare immagine.", "error"); }
+          });
+        }
+      }, 150);
     });
   };
 
@@ -193,7 +213,7 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
               if (c !== '#000000') { 
                 checkAccessAndExecute('customization', 'dinamico', async (usedAd) => {
                   setQrColor(c);
-                  if (usedAd) await incrementCounters(false, true);
+                  if (usedAd) await recordAdUse();
                 }); 
               } else { 
                 setQrColor(c); 
@@ -204,7 +224,10 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
         {text.trim() ? (
           <View style={styles.centerWrapper}>
             <View style={styles.qrBox}>
-              <QRCode getRef={(c) => (svgRef.current = c)} value={RICKROLL_PREVIEW_URL} size={180} color={qrColor} backgroundColor="#FFF" logo={logoUri ? { uri: logoUri } : null} logoSize={42} logoBackgroundColor='white' logoBorderRadius={8} />
+              <QRCode value={RICKROLL_PREVIEW_URL} size={180} color={qrColor} backgroundColor="#FFF" logo={logoUri ? { uri: logoUri } : null} logoSize={42} logoBackgroundColor='white' logoBorderRadius={8} />
+            </View>
+            <View style={{ position: 'absolute', left: -9999, top: -9999 }}>
+              <QRCode getRef={(c) => (downloadSvgRef.current = c)} value={realQrValueForExport || "https://example.com"} size={300} color={qrColor} backgroundColor="#FFF" logo={logoUri ? { uri: logoUri } : null} logoSize={70} logoBackgroundColor='white' logoBorderRadius={12} />
             </View>
             <TouchableOpacity style={styles.downBtnDynamic} onPress={() => handleDownload('dinamico')}><Text style={styles.downBtnText}>💾 SCARICA DINAMICO</Text></TouchableOpacity>
             <TouchableOpacity style={styles.downBtnStatic} onPress={() => handleDownload('statico')}><Text style={styles.downBtnText}>👑 SCARICA STATICO</Text></TouchableOpacity>
