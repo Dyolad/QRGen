@@ -7,7 +7,7 @@ import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from './styles';
 
-const SUPABASE_URL = "https://supabase.co";
+const SUPABASE_URL = "https://bgaajjgdyeyfblfxasxb.supabase.co/rest/v1/"
 const SUPABASE_KEY = "sb_publishable_BAys6XNmda-GHNX6P2Db8A_YZgRU79o";
 
 export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHasAdReward, openFilteredPaywall, history, saveHistory, triggerAlert, setUpsellingModal, scheduleExpiryNotification }) {
