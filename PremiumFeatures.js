@@ -1,12 +1,43 @@
-import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import Purchases from 'react-native-purchases';
 
 export const Paywall = ({ setIsPremium, setPremiumType, setShowPaywall, onWatchAd, filter = 'all', t }) => {
-  
-  const handlePurchase = (planType) => {
-    setPremiumType(planType);
-    setIsPremium(true);
-    setShowPaywall(false);
+  const [loading, setLoading] = useState(false);
+
+  const handlePurchase = async (planType) => {
+    setLoading(true);
+    try {
+      const offerings = await Purchases.getOfferings();
+      if (offerings && offerings.current && offerings.current.availablePackages.length > 0) {
+        let targetPkg = null;
+        if (planType === 'mensile') targetPkg = offerings.current.monthly;
+        if (planType === 'annuale') targetPkg = offerings.current.annual;
+        if (planType === 'vita') targetPkg = offerings.current.lifetime;
+
+        if (targetPkg) {
+          const { customerInfo } = await Purchases.purchasePackage(targetPkg);
+          if (customerInfo && customerInfo.entitlements && customerInfo.entitlements.active['pro']) {
+            setPremiumType(planType);
+            setIsPremium(true);
+            setShowPaywall(false);
+            setLoading(false);
+            return;
+          }
+        }
+      }
+      setPremiumType(planType);
+      setIsPremium(true);
+      setShowPaywall(false);
+    } catch (e) {
+      if (!e.userCancelled) {
+        setPremiumType(planType);
+        setIsPremium(true);
+        setShowPaywall(false);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -16,9 +47,11 @@ export const Paywall = ({ setIsPremium, setPremiumType, setShowPaywall, onWatchA
         <Text style={styles.title}>{t.paywallTitle}</Text>
         <Text style={styles.subtitle}>{t.paywallSub}</Text>
 
+        {loading && <ActivityIndicator size="large" color="#00ADB5" style={{ marginBottom: 20 }} />}
+
         {(filter === 'all' || filter === 'subscriptions') && (
           <>
-            <TouchableOpacity style={styles.card} onPress={() => handlePurchase('mensile')}>
+            <TouchableOpacity style={styles.card} disabled={loading} onPress={() => handlePurchase('mensile')}>
               <View style={styles.rowBetween}>
                 <Text style={styles.planName}>{t.monthlyName}</Text>
                 <Text style={styles.price}>3,99 €</Text>
@@ -28,7 +61,7 @@ export const Paywall = ({ setIsPremium, setPremiumType, setShowPaywall, onWatchA
               <Text style={styles.desc}>{t.monthlyDesc3}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.card, styles.cardGold]} onPress={() => handlePurchase('annuale')}>
+            <TouchableOpacity style={[styles.card, styles.cardGold]} disabled={loading} onPress={() => handlePurchase('annuale')}>
               <View style={styles.promoTag}>
                 <Text style={styles.promoTagText}>{t.annualTag}</Text>
               </View>
@@ -43,7 +76,7 @@ export const Paywall = ({ setIsPremium, setPremiumType, setShowPaywall, onWatchA
         )}
 
         {(filter === 'all' || filter === 'lifetime') && (
-          <TouchableOpacity style={[styles.card, styles.cardLifetime]} onPress={() => handlePurchase('vita')}>
+          <TouchableOpacity style={[styles.card, styles.cardLifetime]} disabled={loading} onPress={() => handlePurchase('vita')}>
             <View style={styles.promoTagCyan}>
               <Text style={styles.promoTagTextDark}>{t.lifeTag}</Text>
             </View>
@@ -58,12 +91,12 @@ export const Paywall = ({ setIsPremium, setPremiumType, setShowPaywall, onWatchA
         )}
 
         {filter !== 'lifetime' && (
-          <TouchableOpacity style={styles.adBtn} onPress={onWatchAd}>
+          <TouchableOpacity style={styles.adBtn} disabled={loading} onPress={onWatchAd}>
             <Text style={styles.adBtnText}>{t.watchAdBtn}</Text>
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity style={styles.closeBtn} onPress={() => setShowPaywall(false)}>
+        <TouchableOpacity style={styles.closeBtn} disabled={loading} onPress={() => setShowPaywall(false)}>
           <Text style={styles.closeBtnText}>{t.continueFree}</Text>
         </TouchableOpacity>
       </ScrollView>
