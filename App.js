@@ -15,7 +15,7 @@ import { translations, getInitialLanguage } from './translations';
 const SUPABASE_URL = "https://supabase.co";
 const SUPABASE_KEY = "sb_publishable_BAys6XNmda-GHNX6P2Db8A_YZgRU79o";
 
-const AD_UNIT_ID = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-3940256099942544/5224354917';
+const AD_UNIT_ID = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-2667726502093063/4330980798';
 const REVENUECAT_ANDROID_KEY = "goog_INSERISCI_QUI_LA_TUA_CHIAVE_REVENUECAT";
 
 const rewarded = RewardedAd.createForAdRequest(AD_UNIT_ID, {
