@@ -3,13 +3,15 @@ import { StyleSheet, Text, View, TouchableOpacity, Linking, Modal } from 'react-
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ScreenCapture from 'expo-screen-capture';
 import * as Notifications from 'expo-notifications';
+import * as Localization from 'expo-localization';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Paywall } from './PremiumFeatures'; 
 import QRGenerator from './QRGenerator'; 
 import HistoryManager from './HistoryManager'; 
+import { translations, getInitialLanguage } from './translations';
 
-const SUPABASE_URL = "https://bgaajjgdyeyfblfxasxb.supabase.co"
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJnYWFqamdkeWV5ZmJsZnhhc3hiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5OTU0MTMsImV4cCI6MjEwNzU3MTQxM30.-hIIgm5ib6tJWCmwKRumeatYMQJan6WYK-MLH_zhYt8";
+const SUPABASE_URL = "https://supabase.co";
+const SUPABASE_KEY = "sb_publishable_BAys6XNmda-GHNX6P2Db8A_YZgRU79o";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -31,7 +33,11 @@ export default function App() {
   const [paywallFilter, setPaywallFilter] = useState('all'); 
   const [currentTab, setCurrentTab] = useState('scanner'); 
   const [upsellModal, setUpsellingModal] = useState(false);
+  const [lang, setLang] = useState('en');
+  const [langModal, setLangModal] = useState(false);
   const [customAlert, setCustomAlert] = useState({ visible: false, title: '', message: '', type: 'info' });
+
+  const t = translations[lang] || translations.en;
 
   useEffect(() => {
     (async () => {
@@ -39,10 +45,28 @@ export default function App() {
         await requestPermission();
       }
       await Notifications.requestPermissionsAsync();
+      try {
+        const savedLang = await AsyncStorage.getItem('@app_language');
+        if (savedLang && translations[savedLang]) {
+          setLang(savedLang);
+        } else {
+          const locales = Localization.getLocales();
+          const deviceCode = locales && locales.length > 0 ? locales[0].languageCode : 'en';
+          setLang(getInitialLanguage(deviceCode));
+        }
+      } catch (e) { console.log(e); }
     })();
     loadHistory();
     ScreenCapture.preventScreenCaptureAsync(); 
   }, []);
+
+  const changeLanguage = async (newLang) => {
+    setLang(newLang);
+    setLangModal(false);
+    try {
+      await AsyncStorage.setItem('@app_language', newLang);
+    } catch (e) { console.log(e); }
+  };
 
   const triggerAlert = (title, message, type = 'info') => {
     setCustomAlert({ visible: true, title, message, type });
@@ -117,17 +141,24 @@ export default function App() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>A D V A N C E D  Q R</Text>
+      <View style={styles.headerRow}>
+        <View style={{ width: 45 }} />
+        <Text style={styles.title}>A D V A N C E D  Q R</Text>
+        <TouchableOpacity style={styles.langBtn} onPress={() => setLangModal(true)}>
+          <Text style={styles.langBtnTxt}>🌐 {lang.toUpperCase()}</Text>
+        </TouchableOpacity>
+      </View>
+
       {isPremium && premiumType !== 'none' && (
         <Text style={styles.proBadge}>👑 PRO ACTIVE ({premiumType.toUpperCase()})</Text>
       )}
       {hasAdReward && !isPremium && <Text style={styles.adBadge}>📺 AD REWARD ACTIVE (1 USE)</Text>}
       
       <View style={styles.nav}>
-        {['scanner', 'generator', 'history'].map(t => (
-          <TouchableOpacity key={t} style={[styles.navB, currentTab === t && styles.navAct]} onPress={() => { setCurrentTab(t); if(t === 'scanner') setScanned(false); }}>
-            <Text style={[styles.navTxt, currentTab === t && styles.activeTxt]}>
-              {t === 'scanner' ? 'Scanner' : t === 'generator' ? 'Crea' : 'Archivio'}
+        {['scanner', 'generator', 'history'].map(tab => (
+          <TouchableOpacity key={tab} style={[styles.navB, currentTab === tab && styles.navAct]} onPress={() => { setCurrentTab(tab); if(tab === 'scanner') setScanned(false); }}>
+            <Text style={[styles.navTxt, currentTab === tab && styles.activeTxt]}>
+              {tab === 'scanner' ? t.scanner : tab === 'generator' ? t.create : t.archive}
             </Text>
           </TouchableOpacity>
         ))}
@@ -137,7 +168,7 @@ export default function App() {
         <QRGenerator 
           isPremium={isPremium} premiumType={premiumType} hasAdReward={hasAdReward} setHasAdReward={setHasAdReward}
           openFilteredPaywall={openFilteredPaywall} history={history} saveHistory={saveHistory} triggerAlert={triggerAlert}
-          setUpsellingModal={setUpsellingModal} scheduleExpiryNotification={scheduleExpiryNotification}
+          setUpsellingModal={setUpsellingModal} scheduleExpiryNotification={scheduleExpiryNotification} t={t}
         />
       )}
 
@@ -146,17 +177,16 @@ export default function App() {
           {permission && permission.granted ? (
             <CameraView onBarcodeScanned={scanned ? undefined : handleBarCodeScanned} style={StyleSheet.absoluteFillObject} />
           ) : (
-            <Text style={styles.whiteTxt} onPress={requestPermission}>Tocca qui per abilitare la fotocamera</Text>
+            <Text style={styles.whiteTxt} onPress={requestPermission}>{t.camPerm}</Text>
           )}
         </View>
       )}
 
-      {currentTab === 'history' && <HistoryManager history={history} saveHistory={saveHistory} triggerAlert={triggerAlert} />}
+      {currentTab === 'history' && <HistoryManager history={history} saveHistory={saveHistory} triggerAlert={triggerAlert} t={t} />}
 
       <Modal animated visible={showPaywall} onRequestClose={() => setShowPaywall(false)}>
-        <Paywall setIsPremium={setIsPremium} setPremiumType={setPremiumType} setShowPaywall={setShowPaywall} onWatchAd={handleWatchAd} filter={paywallFilter} />
+        <Paywall setIsPremium={setIsPremium} setPremiumType={setPremiumType} setShowPaywall={setShowPaywall} onWatchAd={handleWatchAd} filter={paywallFilter} t={t} />
       </Modal>
-
       <Modal animated transparent visible={customAlert.visible} onRequestClose={() => setCustomAlert({ ...customAlert, visible: false })}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { borderColor: customAlert.type === 'error' ? '#FF5C5C' : customAlert.type === 'success' ? '#20BF6B' : '#2F3B5C' }]}>
@@ -172,20 +202,22 @@ export default function App() {
       <Modal animated transparent visible={upsellModal} onRequestClose={() => setUpsellingModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { borderColor: '#D4AF37' }]}>
-            <Text style={[styles.modalTitle, { color: '#D4AF37' }]}>⚠️ LIMITE RAGGIUNTO</Text>
-            <Text style={styles.modalData}>Hai esaurito i tuoi QR Dinamici mensili. Scegli come continuare:</Text>
-            <TouchableOpacity style={styles.upsellBtnGold} onPress={() => { setPremiumType('annuale'); setIsPremium(true); setUpsellingModal(false); triggerAlert("Effettuato", "Sei passato al piano annuale illimitato!", "success"); }}>
-              <Text style={styles.upsellBtnTextDark}>🚀 PASSA ALL'ANNUALE (Illimitato)</Text>
+            <Text style={[styles.modalTitle, { color: '#D4AF37' }]}>{t.limitReachedTitle}</Text>
+            <Text style={styles.modalData}>{t.limitReachedMsg}</Text>
+            <TouchableOpacity style={styles.upsellBtnGold} onPress={() => { setPremiumType('annuale'); setIsPremium(true); setUpsellingModal(false); triggerAlert("Effettuato", "OK!", "success"); }}>
+              <Text style={styles.upsellBtnTextDark}>{t.upgradeAnnual}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.upsellBtnDark} onPress={async () => { 
               const currentExtra = parseInt(await AsyncStorage.getItem('@extra_slots_v3') || '0', 10);
               await AsyncStorage.setItem('@extra_slots_v3', (currentExtra + 5).toString());
               setUpsellingModal(false); 
-              triggerAlert("Acquisto Riuscito", "Hai sbloccato +5 slot QR extra!", "success"); 
+              triggerAlert("OK", "+5 QR!", "success"); 
             }}>
-              <Text style={styles.upsellBtnTextLight}>➕ Sblocca 5 QR extra (4,99 €)</Text>
+              <Text style={styles.upsellBtnTextLight}>{t.buyExtraSlots}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={{ marginTop: 10 }} onPress={() => setUpsellingModal(false)}><Text style={{ color: '#637394', textDecorationLine: 'underline' }}>Annulla</Text></TouchableOpacity>
+            <TouchableOpacity style={{ marginTop: 10 }} onPress={() => setUpsellingModal(false)}>
+              <Text style={{ color: '#637394', textDecorationLine: 'underline' }}>{t.cancel}</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -193,16 +225,38 @@ export default function App() {
       <Modal animated transparent visible={scanned && currentTab === 'scanner'} onRequestClose={() => setScanned(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={[styles.modalTitle, { color: '#00ADB5' }]}>CONTENUTO RILEVATO</Text>
+            <Text style={[styles.modalTitle, { color: '#00ADB5' }]}>{t.detectedTitle}</Text>
             <Text style={styles.modalData}>{scanResult}</Text>
             <View style={styles.modalRow}>
-              <TouchableOpacity style={styles.modalBtnAct} onPress={() => { setScanned(false); Linking.openURL(scanResult).catch(() => triggerAlert("Info", "Il contenuto è un testo semplice, non un link web.", "info")); }}>
-                <Text style={styles.modalBtnActT}>🌐 Apri Link</Text>
+              <TouchableOpacity style={styles.modalBtnAct} onPress={() => { setScanned(false); Linking.openURL(scanResult).catch(() => triggerAlert("Info", t.plainTextInfo, "info")); }}>
+                <Text style={styles.modalBtnActT}>{t.openLink}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalBtnClose} onPress={() => setScanned(false)}>
-                <Text style={styles.modalBtnCloseT}>Chiudi</Text>
+                <Text style={styles.modalBtnCloseT}>{t.close}</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal animated transparent visible={langModal} onRequestClose={() => setLangModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={[styles.modalTitle, { color: '#00ADB5' }]}>{t.selectLang}</Text>
+            {[
+              { code: 'it', label: '🇮🇹 Italiano' },
+              { code: 'en', label: '🇬🇧 English' },
+              { code: 'es', label: '🇪🇸 Español' },
+              { code: 'fr', label: '🇫🇷 Français' },
+              { code: 'de', label: '🇩🇪 Deutsch' }
+            ].map(item => (
+              <TouchableOpacity key={item.code} style={[styles.upsellBtnDark, lang === item.code && { borderColor: '#00ADB5' }]} onPress={() => changeLanguage(item.code)}>
+                <Text style={styles.upsellBtnTextLight}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={{ marginTop: 10 }} onPress={() => setLangModal(false)}>
+              <Text style={{ color: '#637394', textDecorationLine: 'underline' }}>{t.close}</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -211,6 +265,9 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 5 },
+  langBtn: { backgroundColor: '#141929', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, borderWidth: 1, borderColor: '#1F273D' },
+  langBtnTxt: { color: '#00ADB5', fontSize: 11, fontWeight: '800' },
   container: { flex: 1, backgroundColor: '#090D1A', paddingTop: 60 }, 
   title: { color: '#FFF', fontSize: 16, fontWeight: '300', textAlign: 'center', marginBottom: 5, letterSpacing: 4 },
   proBadge: { color: '#D4AF37', fontSize: 11, fontWeight: '800', textAlign: 'center', marginBottom: 10, letterSpacing: 1 },
