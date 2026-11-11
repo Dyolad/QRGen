@@ -31,7 +31,7 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
     })();
   }, []);
 
-  const cleanAndShortenUrl = (rawInput) => {
+ const cleanAndShortenUrl = (rawInput) => {
     let clean = rawInput.trim();
     if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
       return clean;
@@ -139,9 +139,13 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
 
       if (type === 'dinamico') {
         try {
-          const daysToLive = premiumType === 'none' ? 7 : 30;
-          const expiryDate = new Date();
-          expiryDate.setDate(expiryDate.getDate() + daysToLive);
+          let expiryDateIso = null;
+          if (premiumType === 'none' || premiumType === 'mensile') {
+            const daysToLive = premiumType === 'none' ? 7 : 30;
+            const expiryDate = new Date();
+            expiryDate.setDate(expiryDate.getDate() + daysToLive);
+            expiryDateIso = expiryDate.toISOString();
+          }
           const response = await fetch(`${SUPABASE_URL}/rest/v1/qr_codes`, {
             method: 'POST',
             headers: {
@@ -153,7 +157,7 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
             body: JSON.stringify({
               destination_url: optimizedContent,
               is_dynamic: true,
-              expires_at: expiryDate.toISOString(),
+              expires_at: expiryDateIso,
               premium_type: premiumType,
               has_watermark: premiumType === 'none'
             })
