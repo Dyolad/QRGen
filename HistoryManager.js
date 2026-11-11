@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Modal, Linking, Share } from 'react-native';
 
-export default function HistoryManager({ history, saveHistory, triggerAlert }) {
+export default function HistoryManager({ history, saveHistory, triggerAlert, t }) {
   const [archiveTab, setArchiveTab] = useState('scanned'); 
   const [confirmModal, setConfirmModal] = useState({ visible: false, type: '' });
   const [selectedItem, setSelectedItem] = useState(null);
@@ -21,7 +21,7 @@ export default function HistoryManager({ history, saveHistory, triggerAlert }) {
     setSelectedItem(null);
     Linking.openURL(content).catch(() => {
       if (triggerAlert) {
-        triggerAlert("Testo Semplice", "Questo contenuto non è un indirizzo web apribile nel browser.", "info");
+        triggerAlert("Info", t.plainTextInfo, "info");
       }
     });
   };
@@ -36,10 +36,10 @@ export default function HistoryManager({ history, saveHistory, triggerAlert }) {
     <View style={{ flex: 1 }}>
       <View style={styles.subSubNav}>
         <TouchableOpacity style={[styles.subTab, archiveTab === 'scanned' && styles.subTabAct]} onPress={() => setArchiveTab('scanned')}>
-          <Text style={styles.tabTxt}>Scansionati</Text>
+          <Text style={styles.tabTxt}>{t.scannedTab}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.subTab, archiveTab === 'generated' && styles.subTabAct]} onPress={() => setArchiveTab('generated')}>
-          <Text style={styles.tabTxt}>Generati</Text>
+          <Text style={styles.tabTxt}>{t.generatedTab}</Text>
         </TouchableOpacity>
       </View>
 
@@ -50,15 +50,15 @@ export default function HistoryManager({ history, saveHistory, triggerAlert }) {
               <TouchableOpacity key={h.id} style={styles.card} onPress={() => setSelectedItem(h)}>
                 <View style={styles.cardHeaderRow}>
                   <Text style={styles.cardHead}>Scansionato - {h.date}</Text>
-                  <Text style={styles.tapHint}>Tocca per opzioni ➔</Text>
+                  <Text style={styles.tapHint}>{t.tapOptions}</Text>
                 </View>
                 <Text style={styles.cardData} numberOfLines={1}>{h.data}</Text>
               </TouchableOpacity>
             ))}
-            {history.filter(h => h.type === 'Scansionato').length === 0 && <Text style={styles.emptyTxt}>Nessun codice scansionato.</Text>}
+            {history.filter(h => h.type === 'Scansionato').length === 0 && <Text style={styles.emptyTxt}>{t.noScanned}</Text>}
             {history.filter(h => h.type === 'Scansionato').length > 0 && (
               <TouchableOpacity style={styles.clearBtn} onPress={() => setConfirmModal({ visible: true, type: 'Scansionato' })}>
-                <Text style={styles.clearBtnT}>Svuota Scansionati</Text>
+                <Text style={styles.clearBtnT}>{t.clearScanned}</Text>
               </TouchableOpacity>
             )}
           </>
@@ -70,35 +70,36 @@ export default function HistoryManager({ history, saveHistory, triggerAlert }) {
               <TouchableOpacity key={h.id} style={styles.card} onPress={() => setSelectedItem(h)}>
                 <View style={styles.cardHeaderRow}>
                   <Text style={styles.cardHead}>{h.type} - {h.date}</Text>
-                  <Text style={styles.tapHint}>Tocca per opzioni ➔</Text>
+                  <Text style={styles.tapHint}>{t.tapOptions}</Text>
                 </View>
                 <Text style={styles.cardData} numberOfLines={1}>{h.data}</Text>
               </TouchableOpacity>
             ))}
-            {history.filter(h => h.type === 'Statico' || h.type === 'Dinamico').length === 0 && <Text style={styles.emptyTxt}>Nessun codice salvato.</Text>}
+            {history.filter(h => h.type === 'Statico' || h.type === 'Dinamico').length === 0 && <Text style={styles.emptyTxt}>{t.noGenerated}</Text>}
             {history.filter(h => h.type === 'Statico' || h.type === 'Dinamico').length > 0 && (
               <TouchableOpacity style={styles.clearBtn} onPress={() => setConfirmModal({ visible: true, type: 'Generato' })}>
-                <Text style={styles.clearBtnT}>Svuota Generati</Text>
+                <Text style={styles.clearBtnT}>{t.clearGenerated}</Text>
               </TouchableOpacity>
             )}
           </>
         )}
       </ScrollView>
-<Modal animated transparent visible={selectedItem !== null} onRequestClose={() => setSelectedItem(null)}>
+
+      <Modal animated transparent visible={selectedItem !== null} onRequestClose={() => setSelectedItem(null)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { borderColor: '#00ADB5' }]}>
             <Text style={[styles.modalTitle, { color: '#00ADB5' }]}>{selectedItem ? selectedItem.type.toUpperCase() : ''}</Text>
             <Text style={styles.modalData}>{selectedItem ? selectedItem.data : ''}</Text>
             <View style={styles.modalRow}>
               <TouchableOpacity style={styles.modalBtnAct} onPress={() => handleOpenLink(selectedItem.data)}>
-                <Text style={styles.modalBtnActT}>🌐 Apri</Text>
+                <Text style={styles.modalBtnActT}>{t.open}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalBtnShare} onPress={() => handleShare(selectedItem.data)}>
-                <Text style={styles.modalBtnShareT}>📤 Condividi</Text>
+                <Text style={styles.modalBtnShareT}>{t.share}</Text>
               </TouchableOpacity>
             </View>
             <TouchableOpacity style={styles.modalBtnFullClose} onPress={() => setSelectedItem(null)}>
-              <Text style={styles.modalBtnCloseT}>Chiudi</Text>
+              <Text style={styles.modalBtnCloseT}>{t.close}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -107,14 +108,14 @@ export default function HistoryManager({ history, saveHistory, triggerAlert }) {
       <Modal animated transparent visible={confirmModal.visible} onRequestClose={() => setConfirmModal({ visible: false, type: '' })}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>SVUOTA ARCHIVIO</Text>
-            <Text style={styles.modalData}>Vuoi davvero eliminare tutti i codici {confirmModal.type === 'Scansionato' ? 'scansionati' : 'generati'} in modo permanente?</Text>
+            <Text style={styles.modalTitle}>{t.clearArchiveTitle}</Text>
+            <Text style={styles.modalData}>{t.clearArchiveMsg}</Text>
             <View style={styles.modalRow}>
               <TouchableOpacity style={styles.modalBtnDelete} onPress={executeClear}>
-                <Text style={styles.modalBtnDeleteT}>Elimina</Text>
+                <Text style={styles.modalBtnDeleteT}>{t.delete}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalBtnClose} onPress={() => setConfirmModal({ visible: false, type: '' })}>
-                <Text style={styles.modalBtnCloseT}>Annulla</Text>
+                <Text style={styles.modalBtnCloseT}>{t.cancel}</Text>
               </TouchableOpacity>
             </View>
           </View>
