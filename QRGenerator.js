@@ -7,10 +7,10 @@ import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from './styles';
 
-const SUPABASE_URL = "https://bgaajjgdyeyfblfxasxb.supabase.co"
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJnYWFqamdkeWV5ZmJsZnhhc3hiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5OTU0MTMsImV4cCI6MjEwNzU3MTQxM30.-hIIgm5ib6tJWCmwKRumeatYMQJan6WYK-MLH_zhYt8";
+const SUPABASE_URL = "https://supabase.co";
+const SUPABASE_KEY = "sb_publishable_BAys6XNmda-GHNX6P2Db8A_YZgRU79o";
 
-export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHasAdReward, openFilteredPaywall, history, saveHistory, triggerAlert, setUpsellingModal, scheduleExpiryNotification }) {
+export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHasAdReward, openFilteredPaywall, history, saveHistory, triggerAlert, setUpsellingModal, scheduleExpiryNotification, t }) {
   const [text, setText] = useState('');
   const [qrColor, setQrColor] = useState('#000000');
   const [logoUri, setLogoUri] = useState(null);
@@ -18,7 +18,7 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
   const [adActionCount, setAdActionCount] = useState(0);
   const [realQrValueForExport, setRealQrValueForExport] = useState('');
   const downloadSvgRef = useRef(null);
-  const RICKROLL_PREVIEW_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+  const RICKROLL_PREVIEW_URL = "https://youtube.com";
 
   useEffect(() => {
     (async () => {
@@ -31,10 +31,10 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
     })();
   }, []);
 
-const cleanAndShortenUrl = (rawInput) => {
+  const cleanAndShortenUrl = (rawInput) => {
     return rawInput.trim();
   };
-  
+
   const recordAdUse = async () => {
     try {
       const nextAd = adActionCount + 1;
@@ -70,7 +70,7 @@ const cleanAndShortenUrl = (rawInput) => {
 
     if (adActionCount >= 5) {
       setHasAdReward(false);
-      triggerAlert("Limite Pubblicità Raggiunto", "Hai esaurito le 5 azioni gratuite con pubblicità. Scegli un piano Pro!", "error");
+      triggerAlert(t.adLimitTitle, t.adLimitMsg, "error");
       openFilteredPaywall(targetType === 'statico' ? 'lifetime' : 'subscriptions');
       return;
     }
@@ -108,7 +108,7 @@ const cleanAndShortenUrl = (rawInput) => {
 
   const handleDownload = (type) => {
     if (!text.trim()) {
-      triggerAlert("Attenzione", "Digita un contenuto.", "info");
+      triggerAlert("Info", t.inputPlaceholder, "info");
       return;
     }
     checkAccessAndExecute('download', type, async (usedAd) => {
@@ -131,6 +131,7 @@ const cleanAndShortenUrl = (rawInput) => {
             expiryDate.setDate(expiryDate.getDate() + daysToLive);
             expiryDateIso = expiryDate.toISOString();
           }
+
           const response = await fetch(`${SUPABASE_URL}/rest/v1/qr_codes`, {
             method: 'POST',
             headers: {
@@ -176,7 +177,7 @@ const cleanAndShortenUrl = (rawInput) => {
               await FileSystem.writeAsStringAsync(path, dataURL, { encoding: FileSystem.EncodingType.Base64 });
               await MediaLibrary.saveToLibraryAsync(path);
               saveHistory([{ id: recordId, data: optimizedContent, qrUrl: finalQRValue, type: type === 'dinamico' ? 'Dinamico' : 'Statico', date: new Date().toLocaleDateString() }, ...history]);
-              triggerAlert("🏆 Scaricato!", "Codice salvato in Galleria.", "success");
+              triggerAlert(t.downloadedTitle, t.downloadedMsg, "success");
             } catch (err) { triggerAlert("Errore", "Impossibile salvare immagine.", "error"); }
           });
         }
@@ -187,15 +188,15 @@ const cleanAndShortenUrl = (rawInput) => {
   return (
     <View style={styles.mainContainer}>
       <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <TextInput style={styles.input} placeholder="Inserisci il link o testo..." placeholderTextColor="#4E5D78" value={text} onChangeText={setText} />
-        <Text style={styles.sectionLabel}>Logo Centrale:</Text>
+        <TextInput style={styles.input} placeholder={t.inputPlaceholder} placeholderTextColor="#4E5D78" value={text} onChangeText={setText} />
+        <Text style={styles.sectionLabel}>{t.centerLogo}</Text>
         <View style={styles.row}>
           <TouchableOpacity style={[styles.toggleBtn, logoUri && styles.toggleAct, { marginRight: logoUri ? 10 : 0 }]} onPress={pickLogoImage}>
-            <Text style={styles.whiteTxt}>{logoUri ? '🖼️ Modifica Logo' : '📁 Carica Logo'}</Text>
+            <Text style={styles.whiteTxt}>{logoUri ? t.editLogo : t.uploadLogo}</Text>
           </TouchableOpacity>
-          {logoUri && <TouchableOpacity style={styles.removeBtn} onPress={() => setLogoUri(null)}><Text style={styles.removeBtnT}>Rimuovi</Text></TouchableOpacity>}
+          {logoUri && <TouchableOpacity style={styles.removeBtn} onPress={() => setLogoUri(null)}><Text style={styles.removeBtnT}>{t.remove}</Text></TouchableOpacity>}
         </View>
-        <Text style={styles.sectionLabel}>Personalizza Colore:</Text>
+        <Text style={styles.sectionLabel}>{t.customColor}</Text>
         <View style={styles.colorRow}>
           {['#000000', '#FF5733', '#20BF6B', '#3867D6'].map(c => (
             <TouchableOpacity key={c} style={[styles.colorDot, { backgroundColor: c }, qrColor === c && styles.colorDotAct]} onPress={() => { 
@@ -218,11 +219,11 @@ const cleanAndShortenUrl = (rawInput) => {
             <View style={{ position: 'absolute', left: -9999, top: -9999 }}>
               <QRCode getRef={(c) => (downloadSvgRef.current = c)} value={realQrValueForExport || "https://example.com"} size={300} color={qrColor} backgroundColor="#FFF" logo={logoUri ? { uri: logoUri } : null} logoSize={70} logoBackgroundColor='white' logoBorderRadius={12} />
             </View>
-            <TouchableOpacity style={styles.downBtnDynamic} onPress={() => handleDownload('dinamico')}><Text style={styles.downBtnText}>💾 SCARICA DINAMICO</Text></TouchableOpacity>
-            <TouchableOpacity style={styles.downBtnStatic} onPress={() => handleDownload('statico')}><Text style={styles.downBtnText}>👑 SCARICA STATICO</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.downBtnDynamic} onPress={() => handleDownload('dinamico')}><Text style={styles.downBtnText}>{t.downloadDynamic}</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.downBtnStatic} onPress={() => handleDownload('statico')}><Text style={styles.downBtnText}>{t.downloadStatic}</Text></TouchableOpacity>
           </View>
         ) : (
-          <View style={styles.emptyBox}><Text style={styles.emptyText}>Digita qualcosa per l'anteprima...</Text></View>
+          <View style={styles.emptyBox}><Text style={styles.emptyText}>{t.emptyPreview}</Text></View>
         )}
       </ScrollView>
     </View>
