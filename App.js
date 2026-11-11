@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Linking, Modal } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Linking, Modal, Platform } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ScreenCapture from 'expo-screen-capture';
 import * as Notifications from 'expo-notifications';
 import * as Localization from 'expo-localization';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import mobileAds, { RewardedAd, RewardedAdEventType, TestIds } from 'react-native-google-mobile-ads';
+import Purchases from 'react-native-purchases';
 import { Paywall } from './PremiumFeatures'; 
 import QRGenerator from './QRGenerator'; 
 import HistoryManager from './HistoryManager'; 
@@ -12,6 +14,13 @@ import { translations, getInitialLanguage } from './translations';
 
 const SUPABASE_URL = "https://supabase.co";
 const SUPABASE_KEY = "sb_publishable_BAys6XNmda-GHNX6P2Db8A_YZgRU79o";
+
+const AD_UNIT_ID = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-3940256099942544/5224354917';
+const REVENUECAT_ANDROID_KEY = "goog_INSERISCI_QUI_LA_TUA_CHIAVE_REVENUECAT";
+
+const rewarded = RewardedAd.createForAdRequest(AD_UNIT_ID, {
+  requestNonPersonalizedAdsOnly: true,
+});
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -29,6 +38,7 @@ export default function App() {
   const [isPremium, setIsPremium] = useState(false); 
   const [premiumType, setPremiumType] = useState('none'); 
   const [hasAdReward, setHasAdReward] = useState(false); 
+  const [adLoaded, setAdLoaded] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false); 
   const [paywallFilter, setPaywallFilter] = useState('all'); 
   const [currentTab, setCurrentTab] = useState('scanner'); 
@@ -55,9 +65,43 @@ export default function App() {
           setLang(getInitialLanguage(deviceCode));
         }
       } catch (e) { console.log(e); }
+
+      try {
+        await mobileAds().initialize();
+      } catch (e) { console.log(e); }
+
+      try {
+        if (Platform.OS === 'android' && !REVENUECAT_ANDROID_KEY.includes('INSERISCI_QUI')) {
+          Purchases.configure({ apiKey: REVENUECAT_ANDROID_KEY });
+          const customerInfo = await Purchases.getCustomerInfo();
+          if (customerInfo.entitlements.active['pro']) {
+            setIsPremium(true);
+            setPremiumType('annuale');
+          }
+        }
+      } catch (e) { console.log(e); }
     })();
+
+    const unsubscribeLoaded = rewarded.addAdEventListener(RewardedAdEventType.LOADED, () => {
+      setAdLoaded(true);
+    });
+
+    const unsubscribeEarned = rewarded.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
+      setHasAdReward(true);
+      setShowPaywall(false);
+      setAdLoaded(false);
+      rewarded.load();
+      triggerAlert("🔋 Gettone Riscatto", "Hai sbloccato UNA singola operazione Pro!", 'success');
+    });
+
+    rewarded.load();
     loadHistory();
-    ScreenCapture.preventScreenCaptureAsync(); 
+    ScreenCapture.preventScreenCaptureAsync();
+
+    return () => {
+      unsubscribeLoaded();
+      unsubscribeEarned();
+    };
   }, []);
 
   const changeLanguage = async (newLang) => {
@@ -128,10 +172,15 @@ export default function App() {
     saveHistory(updatedHistory);
     setScanResult(resolvedData);
   };
-  const handleWatchAd = () => {
-    setHasAdReward(true); 
-    setShowPaywall(false);
-    triggerAlert("🔋 Gettone Riscatto", "Hai sbloccato UNA singola operazione Pro con la pubblicità!", 'success');
+const handleWatchAd = () => {
+    if (adLoaded) {
+      rewarded.show();
+    } else {
+      setHasAdReward(true);
+      setShowPaywall(false);
+      rewarded.load();
+      triggerAlert("🔋 Gettone Riscatto", "Hai sbloccato UNA singola operazione Pro!", 'success');
+    }
   };
 
   const openFilteredPaywall = (filterType) => {
