@@ -31,23 +31,8 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
     })();
   }, []);
 
- const cleanAndShortenUrl = (rawInput) => {
-    let clean = rawInput.trim();
-    if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
-      return clean;
-    }
-    try {
-      const ytMatch = clean.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-      if (ytMatch && ytMatch[1]) {
-        return `https://youtube.com{ytMatch[1]}`;
-      }
-      const urlObj = new URL(clean);
-      const paramsToRemove = ['si', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid'];
-      paramsToRemove.forEach(p => urlObj.searchParams.delete(p));
-      return urlObj.toString();
-    } catch (e) {
-      return clean;
-    }
+const cleanAndShortenUrl = (rawInput) => {
+    return rawInput.trim();
   };
   
   const recordAdUse = async () => {
