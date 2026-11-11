@@ -18,7 +18,7 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
   const [adActionCount, setAdActionCount] = useState(0);
   const [realQrValueForExport, setRealQrValueForExport] = useState('');
   const downloadSvgRef = useRef(null);
-  const RICKROLL_PREVIEW_URL = "https://youtu.be" + "dQw4w9WgXcQ";
+  const RICKROLL_PREVIEW_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 
   useEffect(() => {
     (async () => {
