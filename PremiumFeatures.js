@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
 
-export const Paywall = ({ setIsPremium, setPremiumType, setShowPaywall, onWatchAd, filter = 'all' }) => {
+export const Paywall = ({ setIsPremium, setPremiumType, setShowPaywall, onWatchAd, filter = 'all', t }) => {
   
   const handlePurchase = (planType) => {
     setPremiumType(planType);
@@ -12,32 +12,32 @@ export const Paywall = ({ setIsPremium, setPremiumType, setShowPaywall, onWatchA
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.badge}>👑 PASSA A ADVANCED QR PRO</Text>
-        <Text style={styles.title}>Sblocca tutta la potenza dei QR Code</Text>
-        <Text style={styles.subtitle}>Personalizza con colori, inserisci il tuo logo e gestisci i tuoi codici senza limiti.</Text>
+        <Text style={styles.badge}>{t.proBadge}</Text>
+        <Text style={styles.title}>{t.paywallTitle}</Text>
+        <Text style={styles.subtitle}>{t.paywallSub}</Text>
 
         {(filter === 'all' || filter === 'subscriptions') && (
           <>
             <TouchableOpacity style={styles.card} onPress={() => handlePurchase('mensile')}>
               <View style={styles.rowBetween}>
-                <Text style={styles.planName}>Piano Mensile</Text>
-                <Text style={styles.price}>3,99 € / mese</Text>
+                <Text style={styles.planName}>{t.monthlyName}</Text>
+                <Text style={styles.price}>3,99 €</Text>
               </View>
-              <Text style={styles.desc}>• Fino a 20 QR Dinamici attivi al mese</Text>
-              <Text style={styles.desc}>• Colori personalizzati e Logo centrale</Text>
-              <Text style={styles.desc}>• Nessuna filigrana e zero pubblicità</Text>
+              <Text style={styles.desc}>{t.monthlyDesc1}</Text>
+              <Text style={styles.desc}>{t.monthlyDesc2}</Text>
+              <Text style={styles.desc}>{t.monthlyDesc3}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={[styles.card, styles.cardGold]} onPress={() => handlePurchase('annuale')}>
               <View style={styles.promoTag}>
-                <Text style={styles.promoTagText}>PIÙ SCELTO • RISPARMI IL 48%</Text>
+                <Text style={styles.promoTagText}>{t.annualTag}</Text>
               </View>
               <View style={styles.rowBetween}>
-                <Text style={styles.planName}>Piano Annuale</Text>
-                <Text style={styles.priceGold}>24,99 € / anno</Text>
+                <Text style={styles.planName}>{t.annualName}</Text>
+                <Text style={styles.priceGold}>24,99 €</Text>
               </View>
-              <Text style={styles.desc}>• QR Dinamici ILLIMITATI senza scadenza</Text>
-              <Text style={styles.desc}>• Tutte le funzioni Pro incluse</Text>
+              <Text style={styles.desc}>{t.annualDesc1}</Text>
+              <Text style={styles.desc}>{t.annualDesc2}</Text>
             </TouchableOpacity>
           </>
         )}
@@ -45,26 +45,26 @@ export const Paywall = ({ setIsPremium, setPremiumType, setShowPaywall, onWatchA
         {(filter === 'all' || filter === 'lifetime') && (
           <TouchableOpacity style={[styles.card, styles.cardLifetime]} onPress={() => handlePurchase('vita')}>
             <View style={styles.promoTagCyan}>
-              <Text style={styles.promoTagTextDark}>🔥 OFFERTA LANCIO 1° MESE (INVECE DI 49,99 €)</Text>
+              <Text style={styles.promoTagTextDark}>{t.lifeTag}</Text>
             </View>
             <View style={styles.rowBetween}>
-              <Text style={styles.planName}>Accesso A Vita</Text>
+              <Text style={styles.planName}>{t.lifeName}</Text>
               <Text style={styles.priceCyan}>24,99 €</Text>
             </View>
-            <Text style={styles.desc}>• Paghi una volta sola, tuo per sempre</Text>
-            <Text style={styles.desc}>• Sblocca anche i QR STATICI permanenti</Text>
-            <Text style={styles.desc}>• QR Dinamici illimitati a vita</Text>
+            <Text style={styles.desc}>{t.lifeDesc1}</Text>
+            <Text style={styles.desc}>{t.lifeDesc2}</Text>
+            <Text style={styles.desc}>{t.lifeDesc3}</Text>
           </TouchableOpacity>
         )}
 
         {filter !== 'lifetime' && (
           <TouchableOpacity style={styles.adBtn} onPress={onWatchAd}>
-            <Text style={styles.adBtnText}>📺 Guarda un video (1 azione gratis)</Text>
+            <Text style={styles.adBtnText}>{t.watchAdBtn}</Text>
           </TouchableOpacity>
         )}
 
         <TouchableOpacity style={styles.closeBtn} onPress={() => setShowPaywall(false)}>
-          <Text style={styles.closeBtnText}>Continua con la versione base</Text>
+          <Text style={styles.closeBtnText}>{t.continueFree}</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
