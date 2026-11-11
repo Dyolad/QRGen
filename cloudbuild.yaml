@@ -1,17 +1,32 @@
-{
-  "cli": {
-    "version": ">= 5.0.0"
-  },
-  "build": {
-    "preview": {
-      "android": {
-        "buildType": "apk"
-      }
-    },
-    "production": {
-      "android": {
-        "buildType": "app-bundle"
-      }
-    }
-  }
-}
+steps:
+  - name: 'reactnativecommunity/react-native-android:latest'
+    entrypoint: 'bash'
+    env:
+      - 'EXPO_TOKEN=${_EXPO_TOKEN}'
+    args:
+      - '-c'
+      - |
+        npm install -g eas-cli
+        npm install
+        npx expo install --fix
+
+  - name: 'reactnativecommunity/react-native-android:latest'
+    entrypoint: 'bash'
+    env:
+      - 'EXPO_TOKEN=${_EXPO_TOKEN}'
+    args:
+      - '-c'
+      - |
+        yes | eas build --platform android --profile preview --local --output=./advanced-qr.apk
+        yes | eas build --platform android --profile production --local --output=./advanced-qr.aab
+
+artifacts:
+  objects:
+    location: 'gs://${PROJECT_ID}_cloudbuild/builds/${BUILD_ID}'
+    paths:
+      - 'advanced-qr.apk'
+      - 'advanced-qr.aab'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+timeout: '3600s'
