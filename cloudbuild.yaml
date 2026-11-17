@@ -2,7 +2,7 @@ steps:
   - name: 'reactnativecommunity/react-native-android:latest'
     entrypoint: 'bash'
     env:
-      - 'EXPO_TOKEN=${_EXPO_TOKEN}'
+      - 'EXPO_TOKEN="R1rnfICpxkaJehvk5FpvcEnYSCEWXVf1Uw_vtU5kz"'
     args:
       - '-c'
       - |
