@@ -2,13 +2,14 @@ steps:
   - name: 'reactnativecommunity/react-native-android:latest'
     entrypoint: 'bash'
     env:
-      - 'EXPO_TOKEN=Nkr40J195TFXi_B4NW1gV5HXRt6Hna_4riLONNM6'
+      - 'EXPO_TOKEN=Nkr40J195TFXi_B4NWlgV5HXRT6Hna_4riLONNM6'
     args:
       - '-c'
       - |
         npm install -g eas-cli
         npm install
         npx expo install --fix
+        eas init --account dyolad --non-interactive --force
         yes | eas build --platform android --profile preview --local --output=./advanced-qr.apk
         yes | eas build --platform android --profile production --local --output=./advanced-qr.aab
 
