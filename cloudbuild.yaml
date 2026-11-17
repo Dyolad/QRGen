@@ -9,14 +9,6 @@ steps:
         npm install -g eas-cli
         npm install
         npx expo install --fix
-
-  - name: 'reactnativecommunity/react-native-android:latest'
-    entrypoint: 'bash'
-    env:
-      - 'EXPO_TOKEN=${_EXPO_TOKEN}'
-    args:
-      - '-c'
-      - |
         yes | eas build --platform android --profile preview --local --output=./advanced-qr.apk
         yes | eas build --platform android --profile production --local --output=./advanced-qr.aab
 
