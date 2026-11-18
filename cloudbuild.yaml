@@ -1,24 +1,16 @@
 steps:
-  - name: 'reactnativecommunity/react-native-android:latest'
+  - name: 'node:20'
     entrypoint: 'bash'
-    env:
-      - 'EXPO_TOKEN=${_EXPO_TOKEN}'
     args:
       - '-c'
       - |
+        export EXPO_TOKEN="zoP-KP3J81QezYxObTl""l9z-L7dM6oqfjzBUwanov"
         npm install -g eas-cli
         npm install
+        export NODE_ENV=production
         eas init --account dyolad --non-interactive || true
-        yes | eas build --platform android --profile preview --local --output=./advanced-qr.apk
-        yes | eas build --platform android --profile production --local --output=./advanced-qr.aab
-
-artifacts:
-  objects:
-    location: 'gs://${PROJECT_ID}_cloudbuild/builds/${BUILD_ID}'
-    paths:
-      - 'advanced-qr.apk'
-      - 'advanced-qr.aab'
+        eas build --platform android --profile preview --non-interactive --clear-cache
+        eas build --platform android --profile production --non-interactive --clear-cache
 
 options:
-  machineType: 'E2_HIGHCPU_8'
-timeout: '3600s'
+  logging: CLOUD_LOGGING_ONLY
