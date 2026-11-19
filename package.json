@@ -21,7 +21,7 @@
     "react-native": "0.74.5",
     "react-native-qrcode-svg": "^6.3.1",
     "react-native-google-mobile-ads": "13.2.0",
-    "react-native-purchases": "9.6.13",
+    "react-native-purchases": "8.11.0",
     "expo-localization": "~15.0.3",
     "react-native-svg": "15.2.0"
   },
