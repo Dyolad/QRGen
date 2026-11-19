@@ -16,7 +16,7 @@
     },
     "android": {
       "package": "com.dyolad.qrgen",
-      "versionCode": 2,
+      "versionCode": 3,
       "backgroundColor": "#121212",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
