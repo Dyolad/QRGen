@@ -1,6 +1,6 @@
 {
   "name": "advancedqr",
-  "version": "1.0.0",
+  "version": "1.0.0"
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
@@ -21,7 +21,7 @@
     "react-native": "0.74.5",
     "react-native-qrcode-svg": "^6.3.1",
     "react-native-google-mobile-ads": "13.2.0",
-    "react-native-purchases": "8.11.0",
+    "react-native-purchases": "9.5.3",
     "expo-localization": "~15.0.3",
     "react-native-svg": "15.2.0"
   },
