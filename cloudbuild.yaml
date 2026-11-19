@@ -9,7 +9,6 @@ steps:
         npm install
         export NODE_ENV=production
         eas init --account dyolad --non-interactive || true
-        eas build --platform android --profile preview --non-interactive --clear-cache
         eas build --platform android --profile production --non-interactive --clear-cache
 
 options:
