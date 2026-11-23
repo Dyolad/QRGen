@@ -10,7 +10,7 @@ import { styles } from './styles';
 const SUPABASE_URL = "https://supabase.co";
 const SUPABASE_KEY = "sb_publishable_BAys6XNmda-GHNX6P2Db8A_YZgRU79o";
 
-export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHasAdReward, openFilteredPaywall, history, saveHistory, triggerAlert, setUpsellingModal, scheduleExpiryNotification, t }) {
+export default function QRGenerator({ hasLifetime, dynamicPlan, hasAdReward, setHasAdReward, openFilteredPaywall, history, saveHistory, triggerAlert, setUpsellingModal, scheduleExpiryNotification, t }) {
   const [text, setText] = useState('');
   const [qrColor, setQrColor] = useState('#000000');
   const [logoUri, setLogoUri] = useState(null);
@@ -19,6 +19,8 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
   const [realQrValueForExport, setRealQrValueForExport] = useState('');
   const downloadSvgRef = useRef(null);
   const RICKROLL_PREVIEW_URL = "https://youtube.com";
+
+  const isAnyPro = hasLifetime || dynamicPlan !== 'none';
 
   useEffect(() => {
     (async () => {
@@ -43,29 +45,49 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
     } catch (e) { console.log(e); }
   };
 
-  const recordMonthlyQr = async () => {
+  const recordDynamicQr = async () => {
     try {
       const nextMonthly = monthlyCount + 1;
       setMonthlyCount(nextMonthly);
       await AsyncStorage.setItem('@monthly_qr_v3', nextMonthly.toString());
     } catch (e) { console.log(e); }
   };
-
   const checkAccessAndExecute = async (actionType, targetType, successCallback) => {
-    if (isPremium) {
-      if (premiumType === 'mensile' && actionType === 'download' && targetType === 'dinamico') {
-        const extra = parseInt(await AsyncStorage.getItem('@extra_slots_v3') || '0', 10);
-        if (monthlyCount >= (20 + extra)) {
+    if (actionType === 'customization' && isAnyPro) {
+      successCallback(false);
+      return;
+    }
+
+    if (actionType === 'download' && targetType === 'statico') {
+      if (hasLifetime) {
+        successCallback(false);
+      } else {
+        openFilteredPaywall('lifetime');
+      }
+      return;
+    }
+
+    if (actionType === 'download' && targetType === 'dinamico') {
+      if (dynamicPlan === 'mensile') {
+        if (monthlyCount >= 15) {
           setUpsellingModal(true);
           return;
         }
-      }
-      if (targetType === 'statico' && premiumType !== 'vita') {
-        openFilteredPaywall('lifetime');
+        successCallback(false);
         return;
       }
-      successCallback(false);
-      return;
+      if (dynamicPlan === 'annuale') {
+        if (monthlyCount >= 50) {
+          triggerAlert(t.limitReachedTitle, t.limitReachedMsg, "info");
+          return;
+        }
+        successCallback(false);
+        return;
+      }
+      if (hasLifetime && dynamicPlan === 'none') {
+        openFilteredPaywall('vip_subscriptions');
+        return;
+      }
     }
 
     if (adActionCount >= 5) {
@@ -87,6 +109,7 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
 
     openFilteredPaywall(targetType === 'statico' ? 'lifetime' : 'subscriptions');
   };
+
   const pickLogoImage = () => {
     checkAccessAndExecute('customization', 'dinamico', async (usedAd) => {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -105,7 +128,6 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
       }
     });
   };
-
   const handleDownload = (type) => {
     if (!text.trim()) {
       triggerAlert("Info", t.inputPlaceholder, "info");
@@ -121,12 +143,13 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
       const optimizedContent = cleanAndShortenUrl(text);
       let finalQRValue = optimizedContent;
       let recordId = Date.now().toString();
+      let savedDbId = null;
 
       if (type === 'dinamico') {
         try {
           let expiryDateIso = null;
-          if (premiumType === 'none' || premiumType === 'mensile') {
-            const daysToLive = premiumType === 'none' ? 7 : 30;
+          if (dynamicPlan === 'none' || dynamicPlan === 'mensile') {
+            const daysToLive = dynamicPlan === 'none' ? 7 : 30;
             const expiryDate = new Date();
             expiryDate.setDate(expiryDate.getDate() + daysToLive);
             expiryDateIso = expiryDate.toISOString();
@@ -144,17 +167,18 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
               destination_url: optimizedContent,
               is_dynamic: true,
               expires_at: expiryDateIso,
-              premium_type: premiumType,
-              has_watermark: premiumType === 'none'
+              premium_type: dynamicPlan,
+              has_watermark: dynamicPlan === 'none'
             })
           });
           if (response.ok) {
             const data = await response.json();
-            const dbId = (data && data[0] && data[0].id) ? data[0].id : recordId;
+            const dbId = (data && data && data.id) ? data.id : recordId;
+            savedDbId = dbId;
             finalQRValue = `${SUPABASE_URL}/functions/v1/redirect?id=${dbId}`;
-            if (premiumType === 'mensile') await recordMonthlyQr();
+            if (dynamicPlan !== 'none') await recordDynamicQr();
             if (usedAd) await recordAdUse();
-            if (premiumType === 'none') scheduleExpiryNotification(7);
+            if (dynamicPlan === 'none') scheduleExpiryNotification(7);
           } else {
             triggerAlert("Errore Server", "Impossibile salvare il QR Dinamico su Supabase.", "error");
             return;
@@ -176,7 +200,14 @@ export default function QRGenerator({ isPremium, premiumType, hasAdReward, setHa
               const path = `${FileSystem.documentDirectory}QR_${Date.now()}.png`;
               await FileSystem.writeAsStringAsync(path, dataURL, { encoding: FileSystem.EncodingType.Base64 });
               await MediaLibrary.saveToLibraryAsync(path);
-              saveHistory([{ id: recordId, data: optimizedContent, qrUrl: finalQRValue, type: type === 'dinamico' ? 'Dinamico' : 'Statico', date: new Date().toLocaleDateString() }, ...history]);
+              saveHistory([{ 
+                id: recordId, 
+                dbId: savedDbId, 
+                data: optimizedContent, 
+                qrUrl: finalQRValue, 
+                type: type === 'dinamico' ? 'Dinamico' : 'Statico', 
+                date: new Date().toLocaleDateString() 
+              }, ...history]);
               triggerAlert(t.downloadedTitle, t.downloadedMsg, "success");
             } catch (err) { triggerAlert("Errore", "Impossibile salvare immagine.", "error"); }
           });
