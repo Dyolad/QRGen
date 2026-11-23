@@ -1,135 +1,63 @@
-const handleDownload = (type) => {
-    if (!text.trim()) {
-      triggerAlert("Info", t.inputPlaceholder, "info");
-      return;
+import React, { useState } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Modal, Linking, Share, TextInput } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const SUPABASE_URL = "https://supabase.co";
+const SUPABASE_KEY = "sb_publishable_BAys6XNmda-GHNX6P2Db8A_YZgRU79o";
+
+export default function HistoryManager({ history, saveHistory, triggerAlert, hasLifetime, dynamicPlan, openFilteredPaywall, t }) {
+  const [archiveTab, setArchiveTab] = useState('scanned'); 
+  const [confirmModal, setConfirmModal] = useState({ visible: false, type: '' });
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [newUrlInput, setNewUrlInput] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const executeClear = () => {
+    let filtered;
+    if (confirmModal.type === 'Scansionato') {
+      filtered = history.filter(h => h.type !== 'Scansionato');
+    } else {
+      filtered = history.filter(h => h.type !== 'Statico' && h.type !== 'Dinamico');
     }
-    checkAccessAndExecute('download', type, async (usedAd) => {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        triggerAlert("Permesso Negato", "Abilita i permessi di archiviazione.", "error");
-        return;
+    saveHistory(filtered);
+    setConfirmModal({ visible: false, type: '' });
+  };
+
+  const handleOpenLink = (content) => {
+    setSelectedItem(null);
+    Linking.openURL(content).catch(() => {
+      if (triggerAlert) {
+        triggerAlert("Info", t.plainTextInfo, "info");
       }
-
-      const optimizedContent = cleanAndShortenUrl(text);
-      let finalQRValue = optimizedContent;
-      let recordId = Date.now().toString();
-      let savedDbId = null;
-
-      if (type === 'dinamico') {
-        try {
-          let expiryDateIso = null;
-          if (dynamicPlan === 'none' || dynamicPlan === 'mensile') {
-            const daysToLive = dynamicPlan === 'none' ? 7 : 30;
-            const expiryDate = new Date();
-            expiryDate.setDate(expiryDate.getDate() + daysToLive);
-            expiryDateIso = expiryDate.toISOString();
-          }
-
-          const response = await fetch(`${SUPABASE_URL}/rest/v1/qr_codes`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': SUPABASE_KEY,
-              'Authorization': `Bearer ${SUPABASE_KEY}`,
-              'Prefer': 'return=representation'
-            },
-            body: JSON.stringify({
-              destination_url: optimizedContent,
-              is_dynamic: true,
-              expires_at: expiryDateIso,
-              premium_type: dynamicPlan,
-              has_watermark: dynamicPlan === 'none'
-            })
-          });
-          if (response.ok) {
-            const data = await response.json();
-            const dbId = (data && data && data.id) ? data.id : recordId;
-            savedDbId = dbId;
-            finalQRValue = `${SUPABASE_URL}/functions/v1/redirect?id=${dbId}`;
-            if (dynamicPlan !== 'none') await recordDynamicQr();
-            if (usedAd) await recordAdUse();
-            if (dynamicPlan === 'none') scheduleExpiryNotification(7);
-          } else {
-            triggerAlert("Errore Server", "Impossibile salvare il QR Dinamico su Supabase.", "error");
-            return;
-          }
-        } catch (err) {
-          triggerAlert("Errore Rete", "Controlla la connessione internet.", "error");
-          return;
-        }
-      } else if (usedAd) {
-        await recordAdUse();
-      }
-
-      setRealQrValueForExport(finalQRValue);
-
-      setTimeout(() => {
-        if (downloadSvgRef.current) {
-          downloadSvgRef.current.toDataURL(async (dataURL) => {
-            try {
-              const path = `${FileSystem.documentDirectory}QR_${Date.now()}.png`;
-              await FileSystem.writeAsStringAsync(path, dataURL, { encoding: FileSystem.EncodingType.Base64 });
-              await MediaLibrary.saveToLibraryAsync(path);
-              saveHistory([{ 
-                id: recordId, 
-                dbId: savedDbId, 
-                data: optimizedContent, 
-                qrUrl: finalQRValue, 
-                type: type === 'dinamico' ? 'Dinamico' : 'Statico', 
-                date: new Date().toLocaleDateString() 
-              }, ...history]);
-              triggerAlert(t.downloadedTitle, t.downloadedMsg, "success");
-            } catch (err) { triggerAlert("Errore", "Impossibile salvare immagine.", "error"); }
-          });
-        }
-      }, 150);
     });
   };
 
-  return (
-    <View style={styles.mainContainer}>
-      <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <TextInput style={styles.input} placeholder={t.inputPlaceholder} placeholderTextColor="#4E5D78" value={text} onChangeText={setText} />
-        <Text style={styles.sectionLabel}>{t.centerLogo}</Text>
-        <View style={styles.row}>
-          <TouchableOpacity style={[styles.toggleBtn, logoUri && styles.toggleAct, { marginRight: logoUri ? 10 : 0 }]} onPress={pickLogoImage}>
-            <Text style={styles.whiteTxt}>{logoUri ? t.editLogo : t.uploadLogo}</Text>
-          </TouchableOpacity>
-          {logoUri && <TouchableOpacity style={styles.removeBtn} onPress={() => setLogoUri(null)}><Text style={styles.removeBtnT}>{t.remove}</Text></TouchableOpacity>}
-        </View>
-        <Text style={styles.sectionLabel}>{t.customColor}</Text>
-        <View style={styles.colorRow}>
-          {['#000000', '#FF5733', '#20BF6B', '#3867D6'].map(c => (
-            <TouchableOpacity key={c} style={[styles.colorDot, { backgroundColor: c }, qrColor === c && styles.colorDotAct]} onPress={() => { 
-              if (c !== '#000000') { 
-                checkAccessAndExecute('customization', 'dinamico', async (usedAd) => {
-                  setQrColor(c);
-                  if (usedAd) await recordAdUse();
-                }); 
-              } else { 
-                setQrColor(c); 
-              } 
-            }} />
-          ))}
-        </View>
-        {text.trim() ? (
-          <View style={styles.centerWrapper}>
-            <View style={styles.qrBox}>
-              <QRCode value={RICKROLL_PREVIEW_URL} size={180} color={qrColor} backgroundColor="#FFF" logo={logoUri ? { uri: logoUri } : null} logoSize={42} logoBackgroundColor='white' logoBorderRadius={8} />
-            </View>
-            <View style={{ position: 'absolute', left: -9999, top: -9999 }}>
-              <QRCode getRef={(c) => (downloadSvgRef.current = c)} value={realQrValueForExport || "https://example.com"} size={300} color={qrColor} backgroundColor="#FFF" logo={logoUri ? { uri: logoUri } : null} logoSize={70} logoBackgroundColor='white' logoBorderRadius={12} />
-            </View>
-            <TouchableOpacity style={styles.downBtnDynamic} onPress={() => handleDownload('dinamico')}><Text style={styles.downBtnText}>{t.downloadDynamic}</Text></TouchableOpacity>
-            <TouchableOpacity style={styles.downBtnStatic} onPress={() => handleDownload('statico')}><Text style={styles.downBtnText}>{t.downloadStatic}</Text></TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.emptyBox}><Text style={styles.emptyText}>{t.emptyPreview}</Text></View>
-        )}
-      </ScrollView>
-    </View>
-  );
-}
+  const handleShare = async (content) => {
+    try {
+      await Share.share({ message: content });
+    } catch (e) { console.log(e); }
+  };
+
+  const openEditDestination = async () => {
+    if (dynamicPlan === 'none') {
+      setSelectedItem(null);
+      openFilteredPaywall(hasLifetime ? 'vip_subscriptions' : 'subscriptions');
+      return;
+    }
+
+    if (dynamicPlan === 'mensile') {
+      const currentEdits = parseInt(await AsyncStorage.getItem('@monthly_edits_v3') || '0', 10);
+      if (currentEdits >= 10) {
+        setSelectedItem(null);
+        triggerAlert(t.editLimitTitle, t.editLimitMsg, "info");
+        return;
+      }
+    }
+
+    setNewUrlInput(selectedItem.data);
+    setEditModalVisible(true);
+  };
   const saveEditedDestination = async () => {
     const trimmedUrl = newUrlInput.trim();
     if (!trimmedUrl) {
