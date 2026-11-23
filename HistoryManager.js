@@ -1,35 +1,181 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Modal, Linking, Share } from 'react-native';
-
-export default function HistoryManager({ history, saveHistory, triggerAlert, t }) {
-  const [archiveTab, setArchiveTab] = useState('scanned'); 
-  const [confirmModal, setConfirmModal] = useState({ visible: false, type: '' });
-  const [selectedItem, setSelectedItem] = useState(null);
-
-  const executeClear = () => {
-    let filtered;
-    if (confirmModal.type === 'Scansionato') {
-      filtered = history.filter(h => h.type !== 'Scansionato');
-    } else {
-      filtered = history.filter(h => h.type !== 'Statico' && h.type !== 'Dinamico');
+const handleDownload = (type) => {
+    if (!text.trim()) {
+      triggerAlert("Info", t.inputPlaceholder, "info");
+      return;
     }
-    saveHistory(filtered);
-    setConfirmModal({ visible: false, type: '' });
-  };
-
-  const handleOpenLink = (content) => {
-    setSelectedItem(null);
-    Linking.openURL(content).catch(() => {
-      if (triggerAlert) {
-        triggerAlert("Info", t.plainTextInfo, "info");
+    checkAccessAndExecute('download', type, async (usedAd) => {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        triggerAlert("Permesso Negato", "Abilita i permessi di archiviazione.", "error");
+        return;
       }
+
+      const optimizedContent = cleanAndShortenUrl(text);
+      let finalQRValue = optimizedContent;
+      let recordId = Date.now().toString();
+      let savedDbId = null;
+
+      if (type === 'dinamico') {
+        try {
+          let expiryDateIso = null;
+          if (dynamicPlan === 'none' || dynamicPlan === 'mensile') {
+            const daysToLive = dynamicPlan === 'none' ? 7 : 30;
+            const expiryDate = new Date();
+            expiryDate.setDate(expiryDate.getDate() + daysToLive);
+            expiryDateIso = expiryDate.toISOString();
+          }
+
+          const response = await fetch(`${SUPABASE_URL}/rest/v1/qr_codes`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_KEY,
+              'Authorization': `Bearer ${SUPABASE_KEY}`,
+              'Prefer': 'return=representation'
+            },
+            body: JSON.stringify({
+              destination_url: optimizedContent,
+              is_dynamic: true,
+              expires_at: expiryDateIso,
+              premium_type: dynamicPlan,
+              has_watermark: dynamicPlan === 'none'
+            })
+          });
+          if (response.ok) {
+            const data = await response.json();
+            const dbId = (data && data && data.id) ? data.id : recordId;
+            savedDbId = dbId;
+            finalQRValue = `${SUPABASE_URL}/functions/v1/redirect?id=${dbId}`;
+            if (dynamicPlan !== 'none') await recordDynamicQr();
+            if (usedAd) await recordAdUse();
+            if (dynamicPlan === 'none') scheduleExpiryNotification(7);
+          } else {
+            triggerAlert("Errore Server", "Impossibile salvare il QR Dinamico su Supabase.", "error");
+            return;
+          }
+        } catch (err) {
+          triggerAlert("Errore Rete", "Controlla la connessione internet.", "error");
+          return;
+        }
+      } else if (usedAd) {
+        await recordAdUse();
+      }
+
+      setRealQrValueForExport(finalQRValue);
+
+      setTimeout(() => {
+        if (downloadSvgRef.current) {
+          downloadSvgRef.current.toDataURL(async (dataURL) => {
+            try {
+              const path = `${FileSystem.documentDirectory}QR_${Date.now()}.png`;
+              await FileSystem.writeAsStringAsync(path, dataURL, { encoding: FileSystem.EncodingType.Base64 });
+              await MediaLibrary.saveToLibraryAsync(path);
+              saveHistory([{ 
+                id: recordId, 
+                dbId: savedDbId, 
+                data: optimizedContent, 
+                qrUrl: finalQRValue, 
+                type: type === 'dinamico' ? 'Dinamico' : 'Statico', 
+                date: new Date().toLocaleDateString() 
+              }, ...history]);
+              triggerAlert(t.downloadedTitle, t.downloadedMsg, "success");
+            } catch (err) { triggerAlert("Errore", "Impossibile salvare immagine.", "error"); }
+          });
+        }
+      }, 150);
     });
   };
 
-  const handleShare = async (content) => {
+  return (
+    <View style={styles.mainContainer}>
+      <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <TextInput style={styles.input} placeholder={t.inputPlaceholder} placeholderTextColor="#4E5D78" value={text} onChangeText={setText} />
+        <Text style={styles.sectionLabel}>{t.centerLogo}</Text>
+        <View style={styles.row}>
+          <TouchableOpacity style={[styles.toggleBtn, logoUri && styles.toggleAct, { marginRight: logoUri ? 10 : 0 }]} onPress={pickLogoImage}>
+            <Text style={styles.whiteTxt}>{logoUri ? t.editLogo : t.uploadLogo}</Text>
+          </TouchableOpacity>
+          {logoUri && <TouchableOpacity style={styles.removeBtn} onPress={() => setLogoUri(null)}><Text style={styles.removeBtnT}>{t.remove}</Text></TouchableOpacity>}
+        </View>
+        <Text style={styles.sectionLabel}>{t.customColor}</Text>
+        <View style={styles.colorRow}>
+          {['#000000', '#FF5733', '#20BF6B', '#3867D6'].map(c => (
+            <TouchableOpacity key={c} style={[styles.colorDot, { backgroundColor: c }, qrColor === c && styles.colorDotAct]} onPress={() => { 
+              if (c !== '#000000') { 
+                checkAccessAndExecute('customization', 'dinamico', async (usedAd) => {
+                  setQrColor(c);
+                  if (usedAd) await recordAdUse();
+                }); 
+              } else { 
+                setQrColor(c); 
+              } 
+            }} />
+          ))}
+        </View>
+        {text.trim() ? (
+          <View style={styles.centerWrapper}>
+            <View style={styles.qrBox}>
+              <QRCode value={RICKROLL_PREVIEW_URL} size={180} color={qrColor} backgroundColor="#FFF" logo={logoUri ? { uri: logoUri } : null} logoSize={42} logoBackgroundColor='white' logoBorderRadius={8} />
+            </View>
+            <View style={{ position: 'absolute', left: -9999, top: -9999 }}>
+              <QRCode getRef={(c) => (downloadSvgRef.current = c)} value={realQrValueForExport || "https://example.com"} size={300} color={qrColor} backgroundColor="#FFF" logo={logoUri ? { uri: logoUri } : null} logoSize={70} logoBackgroundColor='white' logoBorderRadius={12} />
+            </View>
+            <TouchableOpacity style={styles.downBtnDynamic} onPress={() => handleDownload('dinamico')}><Text style={styles.downBtnText}>{t.downloadDynamic}</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.downBtnStatic} onPress={() => handleDownload('statico')}><Text style={styles.downBtnText}>{t.downloadStatic}</Text></TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.emptyBox}><Text style={styles.emptyText}>{t.emptyPreview}</Text></View>
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+  const saveEditedDestination = async () => {
+    const trimmedUrl = newUrlInput.trim();
+    if (!trimmedUrl) {
+      triggerAlert("Info", t.inputPlaceholder, "error");
+      return;
+    }
+
+    const dbId = selectedItem.dbId || (selectedItem.qrUrl && selectedItem.qrUrl.includes('id=') ? selectedItem.qrUrl.split('id=')[1] : null);
+    if (!dbId) {
+      triggerAlert("Errore", "ID QR non trovato.", "error");
+      return;
+    }
+
+    setSavingEdit(true);
     try {
-      await Share.share({ message: content });
-    } catch (e) { console.log(e); }
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/qr_codes?id=eq.${dbId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`
+        },
+        body: JSON.stringify({ destination_url: trimmedUrl })
+      });
+
+      if (response.ok) {
+        if (dynamicPlan === 'mensile') {
+          const currentEdits = parseInt(await AsyncStorage.getItem('@monthly_edits_v3') || '0', 10);
+          await AsyncStorage.setItem('@monthly_edits_v3', (currentEdits + 1).toString());
+        }
+
+        const updatedHistory = history.map(item => 
+          item.id === selectedItem.id ? { ...item, data: trimmedUrl } : item
+        );
+        saveHistory(updatedHistory);
+        setEditModalVisible(false);
+        setSelectedItem(null);
+        triggerAlert(t.editUpdatedTitle, t.editUpdatedMsg, "success");
+      } else {
+        triggerAlert("Errore Server", "Impossibile aggiornare su Supabase.", "error");
+      }
+    } catch (e) {
+      triggerAlert("Errore Rete", "Controlla la connessione internet.", "error");
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   return (
@@ -63,7 +209,6 @@ export default function HistoryManager({ history, saveHistory, triggerAlert, t }
             )}
           </>
         )}
-
         {archiveTab === 'generated' && (
           <>
             {history.filter(h => h.type === 'Statico' || h.type === 'Dinamico').map(h => (
@@ -85,11 +230,16 @@ export default function HistoryManager({ history, saveHistory, triggerAlert, t }
         )}
       </ScrollView>
 
-      <Modal animated transparent visible={selectedItem !== null} onRequestClose={() => setSelectedItem(null)}>
+      <Modal animated transparent visible={selectedItem !== null && !editModalVisible} onRequestClose={() => setSelectedItem(null)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { borderColor: '#00ADB5' }]}>
             <Text style={[styles.modalTitle, { color: '#00ADB5' }]}>{selectedItem ? selectedItem.type.toUpperCase() : ''}</Text>
             <Text style={styles.modalData}>{selectedItem ? selectedItem.data : ''}</Text>
+            {selectedItem && selectedItem.type === 'Dinamico' && (
+              <TouchableOpacity style={styles.modalBtnEdit} onPress={openEditDestination}>
+                <Text style={styles.modalBtnEditT}>{t.editDestBtn}</Text>
+              </TouchableOpacity>
+            )}
             <View style={styles.modalRow}>
               <TouchableOpacity style={styles.modalBtnAct} onPress={() => handleOpenLink(selectedItem.data)}>
                 <Text style={styles.modalBtnActT}>{t.open}</Text>
@@ -101,6 +251,23 @@ export default function HistoryManager({ history, saveHistory, triggerAlert, t }
             <TouchableOpacity style={styles.modalBtnFullClose} onPress={() => setSelectedItem(null)}>
               <Text style={styles.modalBtnCloseT}>{t.close}</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal animated transparent visible={editModalVisible} onRequestClose={() => setEditModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { borderColor: '#D4AF37' }]}>
+            <Text style={[styles.modalTitle, { color: '#D4AF37' }]}>{t.editDestTitle}</Text>
+            <TextInput style={styles.editInput} value={newUrlInput} onChangeText={setNewUrlInput} placeholder={t.inputPlaceholder} placeholderTextColor="#4E5D78" autoCapitalize="none" />
+            <View style={styles.modalRow}>
+              <TouchableOpacity style={styles.modalBtnEditSave} disabled={savingEdit} onPress={saveEditedDestination}>
+                <Text style={styles.modalBtnActT}>{savingEdit ? t.savingBtn : t.saveBtn}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalBtnClose} disabled={savingEdit} onPress={() => setEditModalVisible(false)}>
+                <Text style={styles.modalBtnCloseT}>{t.cancel}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -144,6 +311,10 @@ const styles = StyleSheet.create({
   modalTitle: { color: '#FF5C5C', fontSize: 13, fontWeight: '800', letterSpacing: 1.5, marginBottom: 15 },
   modalData: { color: '#FFF', fontSize: 15, textAlign: 'center', marginBottom: 25, lineHeight: 22 },
   modalRow: { flexDirection: 'row', width: '100%', gap: 10 },
+  modalBtnEdit: { width: '100%', backgroundColor: '#D4AF37', padding: 15, borderRadius: 16, alignItems: 'center', marginBottom: 10 },
+  modalBtnEditT: { color: '#090D1A', fontWeight: '800', fontSize: 13, letterSpacing: 0.5 },
+  modalBtnEditSave: { flex: 1, backgroundColor: '#D4AF37', padding: 16, borderRadius: 16, alignItems: 'center' },
+  editInput: { width: '100%', backgroundColor: '#090D1A', color: '#FFF', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#2F3B5C', marginBottom: 20, fontSize: 14 },
   modalBtnAct: { flex: 1, backgroundColor: '#00ADB5', padding: 15, borderRadius: 16, alignItems: 'center' },
   modalBtnActT: { color: '#090D1A', fontWeight: '800' },
   modalBtnShare: { flex: 1, backgroundColor: '#20BF6B', padding: 15, borderRadius: 16, alignItems: 'center' },
