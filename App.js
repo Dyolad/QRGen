@@ -5,7 +5,7 @@ import * as ScreenCapture from 'expo-screen-capture';
 import * as Notifications from 'expo-notifications';
 import * as Localization from 'expo-localization';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import mobileAds, { RewardedAd, RewardedAdEventType, TestIds } from 'react-native-google-mobile-ads';
+import mobileAds, { RewardedAd, RewardedAdEventType, TestIds, BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
 import Purchases from 'react-native-purchases';
 import { Paywall } from './PremiumFeatures'; 
 import QRGenerator from './QRGenerator'; 
@@ -16,6 +16,7 @@ const SUPABASE_URL = "https://supabase.co";
 const SUPABASE_KEY = "sb_publishable_BAys6XNmda-GHNX6P2Db8A_YZgRU79o";
 
 const AD_UNIT_ID = __DEV__ ? TestIds.REWARDED : 'ca-app-pub-2667726502093063/4330980798';
+const BANNER_UNIT_ID = __DEV__ ? TestIds.BANNER : 'INSERISCI_QUI_IL_TUO_ID_BANNER_ADMOB';
 const REVENUECAT_ANDROID_KEY = "goog_KVTeGhcGHhHsTOyFQQHaiTLlqMp";
 
 const rewarded = RewardedAd.createForAdRequest(AD_UNIT_ID, {
@@ -35,8 +36,10 @@ export default function App() {
   const [scanned, setScanned] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const [history, setHistory] = useState([]);
-  const [isPremium, setIsPremium] = useState(false); 
-  const [premiumType, setPremiumType] = useState('none'); 
+  
+  const [hasLifetime, setHasLifetime] = useState(false);
+  const [dynamicPlan, setDynamicPlan] = useState('none');
+  
   const [hasAdReward, setHasAdReward] = useState(false); 
   const [adLoaded, setAdLoaded] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false); 
@@ -48,7 +51,7 @@ export default function App() {
   const [customAlert, setCustomAlert] = useState({ visible: false, title: '', message: '', type: 'info' });
 
   const t = translations[lang] || translations.en;
-
+  const isAnyPro = hasLifetime || dynamicPlan !== 'none';
   useEffect(() => {
     (async () => {
       if (!permission || !permission.granted) {
@@ -74,9 +77,19 @@ export default function App() {
         if (Platform.OS === 'android' && !REVENUECAT_ANDROID_KEY.includes('INSERISCI_QUI')) {
           Purchases.configure({ apiKey: REVENUECAT_ANDROID_KEY });
           const customerInfo = await Purchases.getCustomerInfo();
-          if (customerInfo.entitlements.active['pro']) {
-            setIsPremium(true);
-            setPremiumType('annuale');
+          
+          if (customerInfo.entitlements.active['lifetime_access'] || customerInfo.allPurchasedProductIdentifiers.some(id => id.includes('lifetime'))) {
+            setHasLifetime(true);
+          }
+
+          const activeDynamic = customerInfo.entitlements.active['dynamic_access'] || customerInfo.entitlements.active['pro'];
+          if (activeDynamic) {
+            const prodId = activeDynamic.productIdentifier || '';
+            if (prodId.includes('annual')) {
+              setDynamicPlan('annuale');
+            } else if (prodId.includes('month')) {
+              setDynamicPlan('mensile');
+            }
           }
         }
       } catch (e) { console.log(e); }
@@ -103,7 +116,6 @@ export default function App() {
       unsubscribeEarned();
     };
   }, []);
-
   const changeLanguage = async (newLang) => {
     setLang(newLang);
     setLangModal(false);
@@ -172,14 +184,13 @@ export default function App() {
     saveHistory(updatedHistory);
     setScanResult(resolvedData);
   };
-const handleWatchAd = () => {
+
+  const handleWatchAd = () => {
     if (adLoaded) {
       rewarded.show();
     } else {
-      setHasAdReward(true);
-      setShowPaywall(false);
+      triggerAlert("Info", "Pubblicità in caricamento, riprova tra qualche secondo.", "info");
       rewarded.load();
-      triggerAlert("🔋 Gettone Riscatto", "Hai sbloccato UNA singola operazione Pro!", 'success');
     }
   };
 
@@ -188,6 +199,12 @@ const handleWatchAd = () => {
     setShowPaywall(true);
   };
 
+  const getBadgeText = () => {
+    if (hasLifetime && dynamicPlan !== 'none') return `👑 LIFETIME + DINAMICO (${dynamicPlan.toUpperCase()})`;
+    if (hasLifetime) return `👑 LIFETIME ACTIVE`;
+    if (dynamicPlan !== 'none') return `👑 PRO ACTIVE (${dynamicPlan.toUpperCase()})`;
+    return '';
+  };
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
@@ -198,10 +215,8 @@ const handleWatchAd = () => {
         </TouchableOpacity>
       </View>
 
-      {isPremium && premiumType !== 'none' && (
-        <Text style={styles.proBadge}>👑 PRO ACTIVE ({premiumType.toUpperCase()})</Text>
-      )}
-      {hasAdReward && !isPremium && <Text style={styles.adBadge}>📺 AD REWARD ACTIVE (1 USE)</Text>}
+      {isAnyPro && <Text style={styles.proBadge}>{getBadgeText()}</Text>}
+      {hasAdReward && !isAnyPro && <Text style={styles.adBadge}>📺 AD REWARD ACTIVE (1 USE)</Text>}
       
       <View style={styles.nav}>
         {['scanner', 'generator', 'history'].map(tab => (
@@ -215,7 +230,7 @@ const handleWatchAd = () => {
 
       {currentTab === 'generator' && (
         <QRGenerator 
-          isPremium={isPremium} premiumType={premiumType} hasAdReward={hasAdReward} setHasAdReward={setHasAdReward}
+          hasLifetime={hasLifetime} dynamicPlan={dynamicPlan} hasAdReward={hasAdReward} setHasAdReward={setHasAdReward}
           openFilteredPaywall={openFilteredPaywall} history={history} saveHistory={saveHistory} triggerAlert={triggerAlert}
           setUpsellingModal={setUpsellingModal} scheduleExpiryNotification={scheduleExpiryNotification} t={t}
         />
@@ -231,11 +246,20 @@ const handleWatchAd = () => {
         </View>
       )}
 
-      {currentTab === 'history' && <HistoryManager history={history} saveHistory={saveHistory} triggerAlert={triggerAlert} t={t} />}
+      {currentTab === 'history' && (
+        <HistoryManager 
+          history={history} saveHistory={saveHistory} triggerAlert={triggerAlert} 
+          hasLifetime={hasLifetime} dynamicPlan={dynamicPlan} openFilteredPaywall={openFilteredPaywall} t={t} 
+        />
+      )}
 
       <Modal animated visible={showPaywall} onRequestClose={() => setShowPaywall(false)}>
-        <Paywall setIsPremium={setIsPremium} setPremiumType={setPremiumType} setShowPaywall={setShowPaywall} onWatchAd={handleWatchAd} filter={paywallFilter} t={t} />
+        <Paywall 
+          hasLifetime={hasLifetime} setHasLifetime={setHasLifetime} setDynamicPlan={setDynamicPlan} 
+          setShowPaywall={setShowPaywall} onWatchAd={handleWatchAd} filter={paywallFilter} triggerAlert={triggerAlert} t={t} 
+        />
       </Modal>
+
       <Modal animated transparent visible={customAlert.visible} onRequestClose={() => setCustomAlert({ ...customAlert, visible: false })}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { borderColor: customAlert.type === 'error' ? '#FF5C5C' : customAlert.type === 'success' ? '#20BF6B' : '#2F3B5C' }]}>
@@ -253,16 +277,11 @@ const handleWatchAd = () => {
           <View style={[styles.modalContent, { borderColor: '#D4AF37' }]}>
             <Text style={[styles.modalTitle, { color: '#D4AF37' }]}>{t.limitReachedTitle}</Text>
             <Text style={styles.modalData}>{t.limitReachedMsg}</Text>
-            <TouchableOpacity style={styles.upsellBtnGold} onPress={() => { setPremiumType('annuale'); setIsPremium(true); setUpsellingModal(false); triggerAlert("Effettuato", "OK!", "success"); }}>
-              <Text style={styles.upsellBtnTextDark}>{t.upgradeAnnual}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.upsellBtnDark} onPress={async () => { 
-              const currentExtra = parseInt(await AsyncStorage.getItem('@extra_slots_v3') || '0', 10);
-              await AsyncStorage.setItem('@extra_slots_v3', (currentExtra + 5).toString());
+            <TouchableOpacity style={styles.upsellBtnGold} onPress={() => { 
               setUpsellingModal(false); 
-              triggerAlert("OK", "+5 QR!", "success"); 
+              openFilteredPaywall(hasLifetime ? 'vip_subscriptions' : 'subscriptions'); 
             }}>
-              <Text style={styles.upsellBtnTextLight}>{t.buyExtraSlots}</Text>
+              <Text style={styles.upsellBtnTextDark}>{t.upgradeAnnual}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={{ marginTop: 10 }} onPress={() => setUpsellingModal(false)}>
               <Text style={{ color: '#637394', textDecorationLine: 'underline' }}>{t.cancel}</Text>
@@ -309,6 +328,12 @@ const handleWatchAd = () => {
           </View>
         </View>
       </Modal>
+
+      {!isAnyPro && (
+        <View style={{ alignItems: 'center', backgroundColor: '#090D1A', paddingBottom: 5 }}>
+          <BannerAd unitId={BANNER_UNIT_ID} size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER} />
+        </View>
+      )}
     </View>
   );
 }
