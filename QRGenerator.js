@@ -173,7 +173,7 @@ export default function QRGenerator({ hasLifetime, dynamicPlan, hasAdReward, set
           });
           if (response.ok) {
             const data = await response.json();
-            const dbId = (data && data && data.id) ? data.id : recordId;
+            const dbId = (data && data[0] && data[0].id) ? data[0].id : recordId;
             savedDbId = dbId;
             finalQRValue = `${SUPABASE_URL}/functions/v1/redirect?id=${dbId}`;
             if (dynamicPlan !== 'none') await recordDynamicQr();
